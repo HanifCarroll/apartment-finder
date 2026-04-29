@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL } from "../src/cli/args";
-import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
+import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "../src/lib/concurrency";
 import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
 import { loadImageFromUrl } from "../src/lib/images";
@@ -24,10 +24,17 @@ type RunArgs = {
   escalationModel: string;
   maxImages: number;
   concurrency: number;
+  listingConcurrency: number;
   extractionCachePath: string;
   useExtractionCache: boolean;
   refreshExtraction: boolean;
 };
+
+class UsageExit extends Error {
+  constructor(public readonly exitCode: number) {
+    super("usage");
+  }
+}
 
 function usage(exitCode = 1): never {
   console.error(`Usage:
@@ -41,11 +48,12 @@ Options:
   --escalation-model <model> Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.
   --max-images <n>           Maximum photos per listing. Defaults to 35.
   --concurrency <n>          Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.
+  --listing-concurrency <n>  Concurrent fixture listings. Defaults to ${DEFAULT_LISTING_CONCURRENCY}.
   --extraction-cache <path>  Listing photo extraction cache path. Defaults to ${DEFAULT_EXTRACTION_CACHE}.
   --refresh-extraction       Ignore cached listing extraction and write a fresh one.
   --no-extraction-cache      Disable listing extraction reads and writes.
 `);
-  process.exit(exitCode);
+  throw new UsageExit(exitCode);
 }
 
 function parseArgs(argv: string[]): RunArgs {
@@ -56,6 +64,7 @@ function parseArgs(argv: string[]): RunArgs {
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     maxImages: 35,
     concurrency: DEFAULT_CONCURRENCY,
+    listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
     extractionCachePath: DEFAULT_EXTRACTION_CACHE,
     useExtractionCache: true,
     refreshExtraction: false,
@@ -105,6 +114,14 @@ function parseArgs(argv: string[]): RunArgs {
         const concurrency = Number.parseInt(next, 10);
         if (!Number.isInteger(concurrency) || concurrency < 1) usage();
         args.concurrency = concurrency;
+        i += 1;
+        break;
+      }
+      case "--listing-concurrency": {
+        if (!next) usage();
+        const listingConcurrency = Number.parseInt(next, 10);
+        if (!Number.isInteger(listingConcurrency) || listingConcurrency < 1) usage();
+        args.listingConcurrency = listingConcurrency;
         i += 1;
         break;
       }
@@ -182,14 +199,23 @@ function imageRecord(
   };
 }
 
-function isEscalationCandidate(record: ClassificationRecordLike, firstPassAggregateLocation: string): boolean {
+function isEscalationCandidate(record: ClassificationRecordLike, _firstPassAggregateLocation: string): boolean {
   const verdict = record.verdict as Verdict | undefined;
   if (!record.ok || !verdict) return false;
+  const verdictText = [
+    verdict.rationale,
+    ...verdict.visual_evidence,
+    ...verdict.in_unit_signals,
+    ...verdict.shared_space_signals,
+  ].join(" ").toLowerCase();
+  const looksLikeBoilerConfusion = /\b(boiler|water heater|calef[oó]n|termotanque|wall[- ]mounted|above (?:a )?(?:counter|sink)|kitchen appliance)\b/.test(verdictText);
+  const mentionsLaundryEvidence = /\b(washer|washing machine|laundry|laundromat|laundry room|lavarropas|lavasecarropas|lavadero|lavander[ií]a|shared laundry)\b/.test(verdictText);
 
-  if (firstPassAggregateLocation === "UNKNOWN") return true;
   if (verdict.location_label === "CONFLICTING") return true;
-  if (verdict.contains_washing_machine && verdict.location_label === "UNKNOWN") return true;
-  if (verdict.location_label === "IN_UNIT" && verdict.confidence < 0.95) return true;
+  if (verdict.contains_washing_machine) return true;
+  if (mentionsLaundryEvidence) return true;
+  if (verdict.location_label === "IN_UNIT" && verdict.confidence < 0.98) return true;
+  if (verdict.location_label === "IN_UNIT" && looksLikeBoilerConfusion) return true;
   if (verdict.location_label === "IN_UNIT" && verdict.washing_machine_visibility !== "clear") return true;
   if (verdict.location_label === "SHARED_BUILDING" && !isStrongEvidence({
     location_label: verdict.location_label,
@@ -258,7 +284,7 @@ async function runSummaryFromExtraction(
       const record = firstPassByIndex.get(index);
       return record
         ? isEscalationCandidate(record, firstPassAggregate.predictedLocation)
-        : firstPassAggregate.predictedLocation === "UNKNOWN";
+        : false;
     });
 
   const escalationRecords = await mapConcurrent(escalationIndexes, args.concurrency, async (index): Promise<unknown> => {
@@ -319,7 +345,7 @@ async function main() {
   const listings = parseJsonl<ListingFixture>(await readFile(args.fixturesPath, "utf8"));
   const extractionCache = await readExtractionCache(args.extractionResultsPath);
 
-  for (const listing of listings) {
+  const listingRecords = await mapConcurrent(listings, args.listingConcurrency, async (listing) => {
     console.log(`Summarizing ${listing.id} (${listing.expected_listing_location})`);
     const cachedExtraction = extractionCache.get(normalizeListingUrl(listing.listing_url));
     const classificationArgs: Args = {
@@ -340,7 +366,7 @@ async function main() {
       jsonOutput: true,
     };
 
-    const records = await (cachedExtraction
+    return await (cachedExtraction
       ? runSummaryFromExtraction(listing, cachedExtraction, args)
       : runClassification(classificationArgs)
     ).catch((error) => [{
@@ -352,11 +378,19 @@ async function main() {
       expected_listing_location: listing.expected_listing_location,
       error: error instanceof Error ? error.message : String(error),
     }]);
+  });
 
-    await appendJsonl(args.outPath, records);
-  }
+  await appendJsonl(args.outPath, listingRecords.flat());
 
   console.log(`Wrote ${args.outPath}`);
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  if (error instanceof UsageExit) {
+    process.exitCode = error.exitCode;
+  } else {
+    throw error;
+  }
+}

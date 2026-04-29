@@ -90,7 +90,7 @@ function imageRecord(
   };
 }
 
-function isEscalationCandidate(record: ClassificationRecordLike, firstPassAggregateLocation: string): boolean {
+function isEscalationCandidate(record: ClassificationRecordLike, _firstPassAggregateLocation: string): boolean {
   const verdict = record.verdict;
   if (!record.ok || !verdict) return false;
   const verdictText = [
@@ -100,10 +100,11 @@ function isEscalationCandidate(record: ClassificationRecordLike, firstPassAggreg
     ...verdict.shared_space_signals,
   ].join(" ").toLowerCase();
   const looksLikeBoilerConfusion = /\b(boiler|water heater|calef[oó]n|termotanque|wall[- ]mounted|above (?:a )?(?:counter|sink)|kitchen appliance)\b/.test(verdictText);
+  const mentionsLaundryEvidence = /\b(washer|washing machine|laundry|laundromat|laundry room|lavarropas|lavasecarropas|lavadero|lavander[ií]a|shared laundry)\b/.test(verdictText);
 
-  if (firstPassAggregateLocation === "UNKNOWN") return true;
   if (verdict.location_label === "CONFLICTING") return true;
-  if (verdict.contains_washing_machine && verdict.location_label === "UNKNOWN") return true;
+  if (verdict.contains_washing_machine) return true;
+  if (mentionsLaundryEvidence) return true;
   if (verdict.location_label === "IN_UNIT" && verdict.confidence < 0.98) return true;
   if (verdict.location_label === "IN_UNIT" && looksLikeBoilerConfusion) return true;
   if (verdict.location_label === "IN_UNIT" && verdict.washing_machine_visibility !== "clear") return true;

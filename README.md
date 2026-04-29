@@ -300,7 +300,8 @@ bun run summary:listings \
   --model gpt-5.4-mini \
   --escalation-model gpt-5.4 \
   --max-images 35 \
-  --concurrency 6
+  --concurrency 6 \
+  --listing-concurrency 6
 
 bun run eval:listing-summaries \
   --listings fixtures/listings.jsonl \
