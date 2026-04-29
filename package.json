@@ -15,18 +15,25 @@
     "report": "bun run scripts/evidence-report.ts",
     "smoke:extractions": "bun run scripts/smoke-listing-extraction.ts",
     "smoke:search": "bun run scripts/smoke-search-discovery.ts",
+    "smoke:browser": "bun run scripts/smoke-playwright.ts",
     "listings:zonaprop": "bun run scripts/find-zonaprop-listings.ts",
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",
     "fixtures:listing-evidence": "bun run scripts/build-listing-evidence-candidates.ts",
     "fixtures:promote": "bun run scripts/promote-reviewed-candidates.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "playwright:install": "playwright install chromium",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "commander": "^14.0.3",
     "openai": "^6.8.1",
+    "playwright": "^1.59.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   }
 }

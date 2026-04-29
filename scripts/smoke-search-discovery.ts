@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
+import { Command } from "commander";
 import { findListingUrlsFromSearchUrl } from "../src/listing-search";
+import type { SearchProvider } from "../src/search-providers";
 
 type SmokeCase = {
   provider: string;
@@ -37,39 +39,19 @@ const CASES: SmokeCase[] = [
   },
 ];
 
-function parseArgs(argv: string[]) {
-  const args = {
-    provider: "",
-  };
+const program = new Command()
+  .name("bun run smoke:search")
+  .description("Smoke test search-result pagination and listing URL discovery.")
+  .option("--provider <provider>", "Only check one provider: zonaprop, argenprop, or airbnb")
+  .parse(process.argv);
 
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = argv[i + 1];
-    switch (arg) {
-      case "--provider":
-        if (!next) throw new Error("--provider requires a value.");
-        args.provider = next;
-        i += 1;
-        break;
-      case "--help":
-      case "-h":
-        console.log("Usage: bun run smoke:search [--provider zonaprop|argenprop|airbnb]");
-        process.exit(0);
-      default:
-        throw new Error(`Unknown argument: ${arg}`);
-    }
-  }
-
-  return args;
-}
-
-const args = parseArgs(process.argv.slice(2));
-const cases = args.provider
-  ? CASES.filter((item) => item.provider === args.provider)
+const options = program.opts<{ provider?: SearchProvider }>();
+const cases = options.provider
+  ? CASES.filter((item) => item.provider === options.provider)
   : CASES;
 
 if (cases.length === 0) {
-  throw new Error(`No search smoke case found for provider: ${args.provider}`);
+  throw new Error(`No search smoke case found for provider: ${options.provider}`);
 }
 
 for (const smokeCase of cases) {

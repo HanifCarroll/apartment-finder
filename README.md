@@ -254,7 +254,11 @@ Listing summary evals report accuracy by expected class and by `decision_source`
 
 ```sh
 bun run typecheck
+bun run test
+bun run smoke:browser
 ```
+
+`bun run playwright:install` installs the Chromium browser used by Playwright smoke checks and future direct browser automation.
 
 Generated outputs, downloaded images, and secrets are ignored:
 

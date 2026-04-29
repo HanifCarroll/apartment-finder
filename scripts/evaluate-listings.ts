@@ -272,7 +272,7 @@ const evalRecords = listings.flatMap((listing): ListingEvalRecord[] => {
   const perModelEvalRecords = models.flatMap((model) => {
     const records = recordsByListingModel.get(`${normalizedListingUrl}\t${model}`) || [];
     if (records.length === 0) {
-      return {
+      const missingRecord: ListingEvalRecord = {
         ok: false,
         listing_id: listing.id,
         listing_url: listing.listing_url,
@@ -285,6 +285,7 @@ const evalRecords = listings.flatMap((listing): ListingEvalRecord[] => {
         image_count: 0,
         error: "No classification records found for listing/model.",
       };
+      return [missingRecord];
     }
 
     return args.policies
