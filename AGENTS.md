@@ -14,7 +14,6 @@ This repo is a Bun CLI prototype for deciding whether an apartment listing has l
 - Extraction records should include `provider`, `gallery_count`, `image_count`, `gallery_count_matches_extracted`, and `extraction_source`.
 - Prefer direct listing metadata or gallery endpoints when available. Use browser automation only when HTTP extraction is unreliable.
 - For Airbnb, treat explicit washer amenity labels as first-class listing metadata: `Washer - in unit` maps to `IN_UNIT`, `Washer - in building` maps to `SHARED_BUILDING`, and plain `Washer` falls back to the vision aggregate.
-- Do not use Zonaprop or Argenprop page-text laundry metadata unless fixture review proves it is helpful in at least 90% of cases.
 - Keep single-listing and batch-scan human output consistent by using `src/listing-output.ts`.
 
 ## Checks
