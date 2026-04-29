@@ -197,15 +197,16 @@ Use `--json` to print one summary JSON object per line.
 
 ## Search And Scan
 
-Use `bun run search` when you have a provider search/results URL instead of individual listing URLs. The command pages through result pages, discovers listing URLs, classifies each listing, and prints only `IN_UNIT` matches by default:
+Use `bun run find` when you have a provider search/results URL instead of individual listing URLs. The command pages through result pages, discovers listing URLs, classifies each listing, and prints only `IN_UNIT` matches by default:
 
 ```sh
-bun run search \
-  --search-url "https://www.zonaprop.com.ar/inmuebles-alquiler-temporal-nunez-las-canitas-con-amoblado-menos-1500-dolar.html" \
+bun run find "https://www.zonaprop.com.ar/inmuebles-alquiler-temporal-nunez-las-canitas-con-amoblado-menos-1500-dolar.html" \
   --max-listings 20 \
   --max-pages 5 \
   --out results/search-zonaprop.jsonl
 ```
+
+`bun run search --search-url <url>` remains available as a compatibility alias for scripts.
 
 Supported search providers:
 
@@ -220,10 +221,12 @@ Search audit records include `page_urls`, so you can confirm which result pages 
 Useful flags:
 
 ```sh
---discover-only # only extract listing URLs, no model calls
---max-pages 5   # page through up to 5 result pages
---all           # print every classified listing instead of only IN_UNIT matches
---json          # print JSON lines
+--discover-only   # only extract listing URLs, no model calls
+--max-pages 5     # page through up to 5 result pages
+--all             # print every classified listing instead of only IN_UNIT matches
+--format cards    # default readable output
+--format table    # tab-separated output
+--format json     # JSON lines
 ```
 
 ## Evaluate Fixtures
