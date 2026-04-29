@@ -51,6 +51,16 @@ function withExtractionMetadata(
   };
 }
 
+function limitExtractionImages(extraction: ListingExtraction, maxImages: number): ListingExtraction {
+  const imageUrls = extraction.image_urls.slice(0, maxImages);
+  return {
+    ...extraction,
+    image_urls: imageUrls,
+    gallery_count_matches_extracted:
+      extraction.gallery_count === null ? null : extraction.gallery_count === imageUrls.length,
+  };
+}
+
 export async function extractListingImageUrls(
   listingUrl: string,
   args: Pick<
@@ -63,7 +73,7 @@ export async function extractListingImageUrls(
     : null;
 
   if (cached && !args.refreshExtraction) {
-    return withExtractionMetadata(cached, {
+    return withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
       extraction_source: "cache",
       extraction_attempts: 0,
     });
@@ -91,7 +101,7 @@ export async function extractListingImageUrls(
 
   const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
   if (cached) {
-    return withExtractionMetadata(cached, {
+    return withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
       extraction_source: "cache_after_live_failure",
       extraction_attempts: MAX_EXTRACTION_ATTEMPTS,
       extraction_error: errorMessage,

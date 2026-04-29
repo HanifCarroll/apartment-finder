@@ -7,28 +7,19 @@ import {
   DEFAULT_MODEL,
 } from "../src/args";
 import { DEFAULT_CONCURRENCY } from "../src/concurrency";
-import { runClassification } from "../src/classifier-runner";
-import { appendJsonl } from "../src/jsonl";
 import {
-  findListingExtractionRecord,
-  findListingSummaryRecord,
+  defaultCommonScanOptions,
+  parseCommonScanOption,
+  type CommonScanCliOptions,
+} from "../src/cli-options";
+import {
   type ListingExtractionRecord,
   type ListingSummaryRecord,
 } from "../src/listing-output";
-import type { Args } from "../src/types";
+import { scanListing } from "../src/listing-scan-runner";
 
-type ReportArgs = {
+type ReportArgs = CommonScanCliOptions & {
   listingUrl: string;
-  outPath?: string;
-  model: string;
-  escalationModel: string;
-  maxImages: number;
-  concurrency: number;
-  cacheDir: string;
-  extractionCachePath: string;
-  useExtractionCache: boolean;
-  refreshExtraction: boolean;
-  jsonOutput: boolean;
 };
 
 function usage(exitCode = 1): never {
@@ -53,16 +44,8 @@ Options:
 
 function parseArgs(argv: string[]): ReportArgs {
   const args: ReportArgs = {
+    ...defaultCommonScanOptions(),
     listingUrl: "",
-    model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-    escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
-    maxImages: DEFAULT_MAX_IMAGES,
-    concurrency: DEFAULT_CONCURRENCY,
-    cacheDir: DEFAULT_CACHE_DIR,
-    extractionCachePath: DEFAULT_EXTRACTION_CACHE,
-    useExtractionCache: true,
-    refreshExtraction: false,
-    jsonOutput: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -70,61 +53,17 @@ function parseArgs(argv: string[]): ReportArgs {
     const next = argv[i + 1];
     if (arg === "--help" || arg === "-h") usage(0);
 
+    const commonIndex = parseCommonScanOption(args, argv, i);
+    if (commonIndex !== null) {
+      i = commonIndex;
+      continue;
+    }
+
     switch (arg) {
       case "--listing-url":
         if (!next) usage();
         args.listingUrl = next;
         i += 1;
-        break;
-      case "--out":
-        if (!next) usage();
-        args.outPath = next;
-        i += 1;
-        break;
-      case "--model":
-        if (!next) usage();
-        args.model = next;
-        i += 1;
-        break;
-      case "--escalation-model":
-        if (!next) usage();
-        args.escalationModel = next;
-        i += 1;
-        break;
-      case "--max-images": {
-        if (!next) usage();
-        const maxImages = Number.parseInt(next, 10);
-        if (!Number.isInteger(maxImages) || maxImages < 1) usage();
-        args.maxImages = maxImages;
-        i += 1;
-        break;
-      }
-      case "--concurrency": {
-        if (!next) usage();
-        const concurrency = Number.parseInt(next, 10);
-        if (!Number.isInteger(concurrency) || concurrency < 1) usage();
-        args.concurrency = concurrency;
-        i += 1;
-        break;
-      }
-      case "--cache-dir":
-        if (!next) usage();
-        args.cacheDir = next;
-        i += 1;
-        break;
-      case "--extraction-cache":
-        if (!next) usage();
-        args.extractionCachePath = next;
-        i += 1;
-        break;
-      case "--refresh-extraction":
-        args.refreshExtraction = true;
-        break;
-      case "--no-extraction-cache":
-        args.useExtractionCache = false;
-        break;
-      case "--json":
-        args.jsonOutput = true;
         break;
       default:
         usage();
@@ -133,25 +72,6 @@ function parseArgs(argv: string[]): ReportArgs {
 
   if (!args.listingUrl) usage();
   return args;
-}
-
-function toClassificationArgs(args: ReportArgs): Args {
-  return {
-    listingUrl: args.listingUrl,
-    models: [args.model],
-    cacheDir: args.cacheDir,
-    extractionCachePath: args.extractionCachePath,
-    useExtractionCache: args.useExtractionCache,
-    refreshExtraction: args.refreshExtraction,
-    detail: "auto",
-    maxImages: args.maxImages,
-    concurrency: args.concurrency,
-    listingSummary: true,
-    escalationModel: args.escalationModel,
-    classifyAll: true,
-    extractOnly: false,
-    jsonOutput: true,
-  };
 }
 
 function evidenceItems(summary: ListingSummaryRecord) {
@@ -226,13 +146,8 @@ if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY is required. Add it to .env as OPENAI_API_KEY=...");
 }
 
-const records = await runClassification(toClassificationArgs(args));
-if (args.outPath) await appendJsonl(args.outPath, records);
-
-const summary = findListingSummaryRecord(records);
-if (!summary) throw new Error("No listing_summary record returned.");
-
-const report = buildReport(summary, findListingExtractionRecord(records));
+const { summary, extraction } = await scanListing(args.listingUrl, args, args.outPath);
+const report = buildReport(summary, extraction);
 if (args.jsonOutput) {
   console.log(JSON.stringify(report, null, 2));
 } else {

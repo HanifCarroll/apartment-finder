@@ -4,6 +4,7 @@ import type { LaundryMetadataSignal } from "./types";
 export type ListingSummaryRecord = {
   ok?: boolean;
   type?: string;
+  created_at?: string;
   listing_url?: string;
   decision?: LocationLabel;
   confidence?: string;

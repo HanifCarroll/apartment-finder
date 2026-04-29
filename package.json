@@ -14,6 +14,7 @@
     "search": "bun run scripts/search-listings.ts",
     "report": "bun run scripts/evidence-report.ts",
     "smoke:extractions": "bun run scripts/smoke-listing-extraction.ts",
+    "smoke:search": "bun run scripts/smoke-search-discovery.ts",
     "listings:zonaprop": "bun run scripts/find-zonaprop-listings.ts",
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",
     "fixtures:listing-evidence": "bun run scripts/build-listing-evidence-candidates.ts",

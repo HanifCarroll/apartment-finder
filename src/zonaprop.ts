@@ -1,19 +1,9 @@
-import { runCommand } from "./shell";
+import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "./playwriter-json";
+import { findListingUrlsFromSearchUrl } from "./listing-search";
 import type { ListingExtraction, PlaywriterListingPayload } from "./types";
 
 const PLAYWRITER_JSON_START = "__APARTMENT_FINDER_JSON_START__";
 const PLAYWRITER_JSON_END = "__APARTMENT_FINDER_JSON_END__";
-
-function parsePlaywriterJson<T>(stdout: string): T {
-  const cleaned = stdout.replace(/^\[log\]\s?/gm, "");
-  const pattern = new RegExp(`${PLAYWRITER_JSON_START}\\n([\\s\\S]*?)\\n${PLAYWRITER_JSON_END}`);
-  const match = cleaned.match(pattern);
-  if (!match) {
-    throw new Error(`Could not find Playwriter JSON payload in output:\n${stdout.slice(-4000)}`);
-  }
-
-  return JSON.parse(match[1]) as T;
-}
 
 function normalizeZonapropImageUrl(url: string): string {
   return url
@@ -172,77 +162,13 @@ console.log(${JSON.stringify(PLAYWRITER_JSON_END)});
 `;
 }
 
-function createPlaywriterListingSearchScript(searchUrl: string, maxListings: number): string {
-  return `
-const searchUrl = ${JSON.stringify(searchUrl)};
-const maxListings = ${JSON.stringify(maxListings)};
-
-state.page = context.pages().find((p) => p.url() === 'about:blank') ?? await context.newPage();
-await state.page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefined);
-await state.page.waitForTimeout(1200);
-
-for (let i = 0; i < 6; i += 1) {
-  await state.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await state.page.waitForTimeout(700);
-}
-
-const payload = {
-  search_url: searchUrl,
-  page_url: state.page.url(),
-  listing_urls: await state.page.evaluate((limit) => {
-    function normalizeListingUrl(url) {
-      try {
-        const parsed = new URL(url, location.href);
-        parsed.search = '';
-        parsed.hash = '';
-        return parsed.href;
-      } catch {
-        return null;
-      }
-    }
-
-    const urls = new Set();
-    for (const anchor of document.querySelectorAll('a[href]')) {
-      const href = anchor.getAttribute('href') || '';
-      if (!/\\/propiedades\\/clasificado\\//.test(href)) continue;
-      const normalized = normalizeListingUrl(href);
-      if (normalized) urls.add(normalized);
-    }
-    return Array.from(urls).slice(0, limit);
-  }, maxListings),
-};
-console.log(${JSON.stringify(PLAYWRITER_JSON_START)});
-console.log(JSON.stringify(payload));
-console.log(${JSON.stringify(PLAYWRITER_JSON_END)});
-`;
-}
-
 export async function extractListingImageUrlsWithPlaywriter(
   listingUrl: string,
   maxImages: number,
 ): Promise<ListingExtraction> {
-  const sessionOutput = runCommand("bunx", ["playwriter@latest", "session", "new"], 30_000);
-  const sessionId = sessionOutput.match(/Session\s+(\d+)\s+created/)?.[1];
-
-  if (!sessionId) {
-    throw new Error(`Could not create Playwriter session:\n${sessionOutput}`);
-  }
-
-  const stdout = runCommand(
-    "bunx",
-    [
-      "playwriter@latest",
-      "-s",
-      sessionId,
-      "--timeout",
-      "90000",
-      "-e",
-      createPlaywriterListingExtractionScript(listingUrl, maxImages),
-    ],
-    100_000,
-  );
-  const payload = parsePlaywriterJson<PlaywriterListingPayload>(stdout);
+  const sessionId = createPlaywriterSession();
+  const stdout = runPlaywriterScript(sessionId, createPlaywriterListingExtractionScript(listingUrl, maxImages), 100_000);
+  const payload = parsePlaywriterJson<PlaywriterListingPayload>(stdout, PLAYWRITER_JSON_START, PLAYWRITER_JSON_END);
   const imageUrls = uniqueZonapropImageUrls(payload.image_urls, maxImages);
 
   return {
@@ -258,35 +184,11 @@ export async function findListingUrlsWithPlaywriter(
   searchUrl: string,
   maxListings: number,
 ): Promise<{ search_url: string; page_url: string; listing_urls: string[]; session_id: string }> {
-  const sessionOutput = runCommand("bunx", ["playwriter@latest", "session", "new"], 30_000);
-  const sessionId = sessionOutput.match(/Session\s+(\d+)\s+created/)?.[1];
-
-  if (!sessionId) {
-    throw new Error(`Could not create Playwriter session:\n${sessionOutput}`);
-  }
-
-  const stdout = runCommand(
-    "bunx",
-    [
-      "playwriter@latest",
-      "-s",
-      sessionId,
-      "--timeout",
-      "90000",
-      "-e",
-      createPlaywriterListingSearchScript(searchUrl, maxListings),
-    ],
-    100_000,
-  );
-  const payload = parsePlaywriterJson<{
-    search_url: string;
-    page_url: string;
-    listing_urls: string[];
-  }>(stdout);
-
+  const result = await findListingUrlsFromSearchUrl(searchUrl, maxListings, 1);
   return {
-    ...payload,
-    listing_urls: Array.from(new Set(payload.listing_urls)).slice(0, maxListings),
-    session_id: sessionId,
+    search_url: result.search_url,
+    page_url: result.page_url,
+    listing_urls: result.listing_urls,
+    session_id: result.session_id,
   };
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { appendJsonl } from "../src/jsonl";
 import {
   DEFAULT_CACHE_DIR,
   DEFAULT_ESCALATION_MODEL,
@@ -7,30 +8,24 @@ import {
   DEFAULT_MODEL,
 } from "../src/args";
 import { DEFAULT_CONCURRENCY } from "../src/concurrency";
-import { runClassification } from "../src/classifier-runner";
-import { appendJsonl } from "../src/jsonl";
 import {
-  findListingExtractionRecord,
-  findListingSummaryRecord,
-  formatListingScanLine,
-} from "../src/listing-output";
+  defaultCommonScanOptions,
+  parseCommonScanOption,
+  type CommonScanCliOptions,
+} from "../src/cli-options";
+import {
+  appendFailedListingScan,
+  formatListingScanResult,
+  listingScanHeader,
+  scanListing,
+} from "../src/listing-scan-runner";
 import { findListingUrlsFromSearchUrl } from "../src/listing-search";
-import type { Args, LocationLabel } from "../src/types";
+import type { LocationLabel } from "../src/types";
 
-type SearchArgs = {
+type SearchArgs = CommonScanCliOptions & {
   searchUrl: string;
-  outPath?: string;
-  model: string;
-  escalationModel: string;
   maxListings: number;
   maxPages: number;
-  maxImages: number;
-  concurrency: number;
-  cacheDir: string;
-  extractionCachePath: string;
-  useExtractionCache: boolean;
-  refreshExtraction: boolean;
-  jsonOutput: boolean;
   includeAll: boolean;
   discoverOnly: boolean;
 };
@@ -63,18 +58,10 @@ Options:
 
 function parseArgs(argv: string[]): SearchArgs {
   const args: SearchArgs = {
+    ...defaultCommonScanOptions(),
     searchUrl: "",
-    model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-    escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     maxListings: 20,
     maxPages: 5,
-    maxImages: DEFAULT_MAX_IMAGES,
-    concurrency: DEFAULT_CONCURRENCY,
-    cacheDir: DEFAULT_CACHE_DIR,
-    extractionCachePath: DEFAULT_EXTRACTION_CACHE,
-    useExtractionCache: true,
-    refreshExtraction: false,
-    jsonOutput: false,
     includeAll: false,
     discoverOnly: false,
   };
@@ -84,15 +71,16 @@ function parseArgs(argv: string[]): SearchArgs {
     const next = argv[i + 1];
     if (arg === "--help" || arg === "-h") usage(0);
 
+    const commonIndex = parseCommonScanOption(args, argv, i);
+    if (commonIndex !== null) {
+      i = commonIndex;
+      continue;
+    }
+
     switch (arg) {
       case "--search-url":
         if (!next) usage();
         args.searchUrl = next;
-        i += 1;
-        break;
-      case "--out":
-        if (!next) usage();
-        args.outPath = next;
         i += 1;
         break;
       case "--max-listings": {
@@ -117,51 +105,6 @@ function parseArgs(argv: string[]): SearchArgs {
       case "--discover-only":
         args.discoverOnly = true;
         break;
-      case "--model":
-        if (!next) usage();
-        args.model = next;
-        i += 1;
-        break;
-      case "--escalation-model":
-        if (!next) usage();
-        args.escalationModel = next;
-        i += 1;
-        break;
-      case "--max-images": {
-        if (!next) usage();
-        const maxImages = Number.parseInt(next, 10);
-        if (!Number.isInteger(maxImages) || maxImages < 1) usage();
-        args.maxImages = maxImages;
-        i += 1;
-        break;
-      }
-      case "--concurrency": {
-        if (!next) usage();
-        const concurrency = Number.parseInt(next, 10);
-        if (!Number.isInteger(concurrency) || concurrency < 1) usage();
-        args.concurrency = concurrency;
-        i += 1;
-        break;
-      }
-      case "--cache-dir":
-        if (!next) usage();
-        args.cacheDir = next;
-        i += 1;
-        break;
-      case "--extraction-cache":
-        if (!next) usage();
-        args.extractionCachePath = next;
-        i += 1;
-        break;
-      case "--refresh-extraction":
-        args.refreshExtraction = true;
-        break;
-      case "--no-extraction-cache":
-        args.useExtractionCache = false;
-        break;
-      case "--json":
-        args.jsonOutput = true;
-        break;
       default:
         usage();
     }
@@ -169,25 +112,6 @@ function parseArgs(argv: string[]): SearchArgs {
 
   if (!args.searchUrl) usage();
   return args;
-}
-
-function toClassificationArgs(listingUrl: string, args: SearchArgs): Args {
-  return {
-    listingUrl,
-    models: [args.model],
-    cacheDir: args.cacheDir,
-    extractionCachePath: args.extractionCachePath,
-    useExtractionCache: args.useExtractionCache,
-    refreshExtraction: args.refreshExtraction,
-    detail: "auto",
-    maxImages: args.maxImages,
-    concurrency: args.concurrency,
-    listingSummary: true,
-    escalationModel: args.escalationModel,
-    classifyAll: true,
-    extractOnly: false,
-    jsonOutput: true,
-  };
 }
 
 function shouldPrint(decision: LocationLabel | undefined, args: SearchArgs): boolean {
@@ -218,7 +142,7 @@ if (args.discoverOnly) {
 }
 
 if (!args.jsonOutput) {
-  console.log(["decision", "confidence", "source", "amenity", "gallery", "evidence", "best_url", "listing_url"].join("\t"));
+  console.log(listingScanHeader());
 }
 
 let matchCount = 0;
@@ -227,30 +151,14 @@ for (let index = 0; index < searchResult.listing_urls.length; index += 1) {
   console.error(`Scanning ${index + 1}/${searchResult.listing_urls.length}: ${listingUrl}`);
 
   try {
-    const records = await runClassification(toClassificationArgs(listingUrl, args));
-    if (args.outPath) await appendJsonl(args.outPath, records);
-
-    const summary = findListingSummaryRecord(records);
-    if (!summary) throw new Error("No listing_summary record returned.");
-    const extraction = findListingExtractionRecord(records);
+    const { summary, extraction } = await scanListing(listingUrl, args, args.outPath);
     if (shouldPrint(summary.decision, args)) {
       matchCount += summary.decision === "IN_UNIT" ? 1 : 0;
-      console.log(args.jsonOutput
-        ? JSON.stringify({ ...summary, extraction })
-        : formatListingScanLine(summary, extraction));
+      console.log(formatListingScanResult(summary, extraction, args.jsonOutput));
     }
   } catch (error) {
-    const failed = {
-      ok: false,
-      type: "listing_summary",
-      created_at: new Date().toISOString(),
-      listing_url: listingUrl,
-      error: error instanceof Error ? error.message : String(error),
-    };
-    if (args.outPath) await appendJsonl(args.outPath, [failed]);
-    if (args.includeAll) {
-      console.log(args.jsonOutput ? JSON.stringify(failed) : formatListingScanLine(failed));
-    }
+    const failed = await appendFailedListingScan(listingUrl, error, args.outPath);
+    if (args.includeAll) console.log(formatListingScanResult(failed, undefined, args.jsonOutput));
   }
 }
 

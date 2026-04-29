@@ -146,6 +146,13 @@ bun run smoke:extractions \
   --refresh-extraction
 ```
 
+To smoke test search-result pagination and listing URL discovery without model calls:
+
+```sh
+bun run smoke:search
+bun run smoke:search --provider airbnb
+```
+
 ## Scan Multiple Listings
 
 Put listing URLs in a newline-delimited file:
