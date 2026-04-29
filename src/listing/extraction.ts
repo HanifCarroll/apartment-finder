@@ -4,6 +4,7 @@ import {
   readCachedListingExtraction,
   writeCachedListingExtraction,
 } from "../extraction-cache";
+import { logger } from "../lib/logger";
 import type { Args, ListingExtraction } from "../types";
 import { extractListingImageUrlsWithPlaywriter } from "../providers/zonaprop";
 
@@ -73,19 +74,39 @@ export async function extractListingImageUrls(
     "maxImages" | "useExtractionCache" | "refreshExtraction" | "extractionCachePath"
   >,
 ): Promise<ListingExtraction> {
+  const provider = detectProvider(listingUrl);
   const cached = args.useExtractionCache
     ? await readCachedListingExtraction(args.extractionCachePath, listingUrl)
     : null;
 
   if (cached && !args.refreshExtraction && isUsableCachedExtraction(cached)) {
-    return withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
+    const startedAt = performance.now();
+    const extraction = withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
       extraction_source: "cache",
       extraction_attempts: 0,
     });
+    logger.info({
+      event: "listing_extraction_cache_hit",
+      provider,
+      listingUrl,
+      imageCount: extraction.image_urls.length,
+      galleryCount: extraction.gallery_count,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+    return extraction;
   }
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_EXTRACTION_ATTEMPTS; attempt += 1) {
+    const attemptStartedAt = performance.now();
+    logger.info({
+      event: "listing_extraction_live_started",
+      provider,
+      listingUrl,
+      attempt,
+      maxImages: args.maxImages,
+      hadCache: Boolean(cached),
+    });
     try {
       const extraction = withExtractionMetadata(
         await extractLiveListingImageUrls(listingUrl, args.maxImages),
@@ -97,20 +118,47 @@ export async function extractListingImageUrls(
       if (args.useExtractionCache && extraction.image_urls.length > 0) {
         await writeCachedListingExtraction(args.extractionCachePath, extraction);
       }
+      logger.info({
+        event: "listing_extraction_live_finished",
+        provider,
+        listingUrl,
+        attempt,
+        imageCount: extraction.image_urls.length,
+        galleryCount: extraction.gallery_count,
+        durationMs: Math.round(performance.now() - attemptStartedAt),
+      });
       return extraction;
     } catch (error) {
       lastError = error;
+      logger.warn({
+        event: "listing_extraction_live_failed",
+        provider,
+        listingUrl,
+        attempt,
+        durationMs: Math.round(performance.now() - attemptStartedAt),
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (attempt < MAX_EXTRACTION_ATTEMPTS) await delay(750 * attempt);
     }
   }
 
   const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
   if (cached) {
-    return withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
+    const extraction = withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
       extraction_source: "cache_after_live_failure",
       extraction_attempts: MAX_EXTRACTION_ATTEMPTS,
       extraction_error: errorMessage,
     });
+    logger.warn({
+      event: "listing_extraction_cache_after_live_failure",
+      provider,
+      listingUrl,
+      attempts: MAX_EXTRACTION_ATTEMPTS,
+      imageCount: extraction.image_urls.length,
+      galleryCount: extraction.gallery_count,
+      error: errorMessage,
+    });
+    return extraction;
   }
 
   throw new Error(`Listing extraction failed after ${MAX_EXTRACTION_ATTEMPTS} attempts: ${errorMessage}`);

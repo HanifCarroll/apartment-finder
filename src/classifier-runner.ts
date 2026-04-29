@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { mapConcurrent } from "./lib/concurrency";
 import { loadImage, loadImageFromUrl } from "./lib/images";
+import { logger } from "./lib/logger";
 import {
   DEFAULT_LISTING_POLICY,
   aggregateByPolicy,
@@ -160,7 +161,18 @@ function listingSummaryRecord(args: Args, extraction: Awaited<ReturnType<typeof 
 async function classifyListing(args: Args): Promise<unknown[]> {
   if (!args.listingUrl) throw new Error("Missing listing URL.");
 
+  const extractionStartedAt = performance.now();
   const extraction = await extractListingImageUrls(args.listingUrl, args);
+  logger.info({
+    event: "listing_phase_finished",
+    phase: "extraction",
+    listingUrl: args.listingUrl,
+    provider: extraction.provider,
+    imageCount: extraction.image_urls.length,
+    galleryCount: extraction.gallery_count,
+    extractionSource: extraction.extraction_source,
+    durationMs: Math.round(performance.now() - extractionStartedAt),
+  });
   const records: unknown[] = [
     {
       ok: true,
@@ -177,6 +189,14 @@ async function classifyListing(args: Args): Promise<unknown[]> {
 
   const amenityDecision = airbnbAmenityDecision(extraction);
   if (args.listingSummary && amenityDecision) {
+    logger.info({
+      event: "listing_phase_finished",
+      phase: "amenity_short_circuit",
+      listingUrl: args.listingUrl,
+      provider: extraction.provider,
+      decision: amenityDecision,
+      durationMs: 0,
+    });
     records.push(listingSummaryRecord(args, extraction, {
       decision: amenityDecision,
       confidence: "high",
@@ -191,10 +211,32 @@ async function classifyListing(args: Args): Promise<unknown[]> {
 
   const classifyImageUrl = async (imageUrl: string, index: number): Promise<unknown[]> => {
     try {
+      const imageLoadStartedAt = performance.now();
       const image = await loadImageFromUrl(imageUrl, args.cacheDir);
+      logger.info({
+        event: "image_phase_finished",
+        phase: "load_image",
+        listingUrl: args.listingUrl,
+        imageIndex: index,
+        imageUrl,
+        bytes: image.bytes,
+        contentType: image.contentType,
+        durationMs: Math.round(performance.now() - imageLoadStartedAt),
+      });
+      const firstPassStartedAt = performance.now();
       const imageRecords = await classifyImagePayload(client, image, args, {
         listing_url: args.listingUrl,
         listing_image_index: index,
+      });
+      logger.info({
+        event: "image_phase_finished",
+        phase: "classify_first_pass",
+        listingUrl: args.listingUrl,
+        imageIndex: index,
+        imageUrl,
+        models: args.models,
+        recordCount: imageRecords.length,
+        durationMs: Math.round(performance.now() - firstPassStartedAt),
       });
       return imageRecords;
     } catch (error) {
@@ -213,16 +255,37 @@ async function classifyListing(args: Args): Promise<unknown[]> {
 
   if (args.classifyAll) {
     const classifyIndexes = async (indexes: number[]): Promise<unknown[]> => {
+      const batchStartedAt = performance.now();
       const imageRecords = await mapConcurrent(
         indexes,
         args.concurrency,
         async (imageIndex) => classifyImageUrl(extraction.image_urls[imageIndex], imageIndex),
       );
-      return imageRecords.flat();
+      const flattened = imageRecords.flat();
+      logger.info({
+        event: "listing_phase_finished",
+        phase: "first_pass_batch",
+        listingUrl: args.listingUrl,
+        imageIndexes: indexes,
+        imageCount: indexes.length,
+        recordCount: flattened.length,
+        durationMs: Math.round(performance.now() - batchStartedAt),
+      });
+      return flattened;
     };
 
     const buildSummary = async (firstPassRecords: ClassificationRecordLike[], classifiedIndexes: number[]) => {
+      const aggregateStartedAt = performance.now();
       const firstPassAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, firstPassRecords);
+      logger.info({
+        event: "listing_phase_finished",
+        phase: "summary_aggregate",
+        listingUrl: args.listingUrl,
+        classifiedImageCount: classifiedIndexes.length,
+        evidenceCount: firstPassAggregate.evidence.length,
+        predictedLocation: firstPassAggregate.predictedLocation,
+        durationMs: Math.round(performance.now() - aggregateStartedAt),
+      });
       const firstPassRecordsByIndex = new Map<number, ClassificationRecordLike>();
       for (const record of firstPassRecords) {
         if (typeof record.listing_image_index === "number") {
@@ -235,14 +298,36 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         return record ? isEscalationCandidate(record, firstPassAggregate.predictedLocation) : false;
       });
 
+      const escalationStartedAt = performance.now();
       const escalationRecords = await mapConcurrent(
         escalationIndexes,
         args.concurrency,
         async (index): Promise<unknown> => {
           const imageUrl = extraction.image_urls[index];
           try {
+            const imageLoadStartedAt = performance.now();
             const image = await loadImageFromUrl(imageUrl, args.cacheDir);
+            logger.info({
+              event: "image_phase_finished",
+              phase: "load_image_escalation",
+              listingUrl: args.listingUrl,
+              imageIndex: index,
+              imageUrl,
+              bytes: image.bytes,
+              contentType: image.contentType,
+              durationMs: Math.round(performance.now() - imageLoadStartedAt),
+            });
+            const escalationImageStartedAt = performance.now();
             const result = await classifyWithModel(client, args.escalationModel, image, args.detail);
+            logger.info({
+              event: "image_phase_finished",
+              phase: "classify_escalation",
+              listingUrl: args.listingUrl,
+              imageIndex: index,
+              imageUrl,
+              model: args.escalationModel,
+              durationMs: Math.round(performance.now() - escalationImageStartedAt),
+            });
             return imageRecord(image, result, {
               listing_url: args.listingUrl,
               listing_image_index: index,
@@ -263,12 +348,31 @@ async function classifyListing(args: Args): Promise<unknown[]> {
           }
         },
       );
+      logger.info({
+        event: "listing_phase_finished",
+        phase: "escalation",
+        listingUrl: args.listingUrl,
+        imageIndexes: escalationIndexes,
+        imageCount: escalationIndexes.length,
+        recordCount: escalationRecords.length,
+        durationMs: Math.round(performance.now() - escalationStartedAt),
+      });
 
+      const finalStartedAt = performance.now();
       const finalRecords = [...firstPassRecords, ...escalationRecords.filter((record): record is ClassificationRecordLike =>
         Boolean(record && typeof record === "object" && "verdict" in record),
       )];
       const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
       const finalConfidence = listingConfidence(finalAggregate);
+      logger.info({
+        event: "listing_phase_finished",
+        phase: "summary_final",
+        listingUrl: args.listingUrl,
+        decision: finalAggregate.predictedLocation,
+        confidence: finalConfidence,
+        evidenceCount: finalAggregate.evidence.length,
+        durationMs: Math.round(performance.now() - finalStartedAt),
+      });
 
       return {
         escalationRecords,

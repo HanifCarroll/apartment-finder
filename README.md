@@ -266,6 +266,8 @@ Open `http://localhost:3000`. Web scans require `OPENAI_API_KEY`.
 
 The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=6` model calls and `LISTING_SCAN_CONCURRENCY=6` listing scans. OpenAI rate limits are account, project, and model specific, so override those env vars if the response headers show more or less capacity.
 
+Backend scan logs are written to `logs/app.log` by default. The log is JSONL and includes search discovery, extraction/cache, listing, batch, image-load, first-pass model, escalation, and summary timing events. Override with `APP_LOG_PATH=/path/to/app.log`.
+
 Useful CLI flags:
 
 ```sh

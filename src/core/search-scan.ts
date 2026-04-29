@@ -48,7 +48,9 @@ export async function scanSearchUrl(
   onItem?: (item: SearchScanItem, index: number) => void,
 ): Promise<SearchScanResult> {
   const scanStartedAt = performance.now();
+  const discoveryStartedAt = performance.now();
   const searchResult = await findListingUrlsFromSearchUrl(searchUrl, options.maxListings, options.maxPages);
+  const discoveryDurationMs = Math.round(performance.now() - discoveryStartedAt);
   const search: SearchScanRecord = {
     ok: true,
     type: "listing_search",
@@ -64,6 +66,8 @@ export async function scanSearchUrl(
     pages: search.page_urls.length,
     maxListings: options.maxListings,
     maxPages: options.maxPages,
+    listingConcurrency: Math.max(1, options.listingConcurrency ?? DEFAULT_LISTING_CONCURRENCY),
+    durationMs: discoveryDurationMs,
   });
 
   if (options.discoverOnly) {
