@@ -16,6 +16,7 @@
     "smoke:extractions": "bun run scripts/smoke-listing-extraction.ts",
     "smoke:search": "bun run scripts/smoke-search-discovery.ts",
     "smoke:browser": "bun run scripts/smoke-playwright.ts",
+    "smoke:browser:sites": "bun run scripts/smoke-browser-sites.ts",
     "listings:zonaprop": "bun run scripts/find-zonaprop-listings.ts",
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",
     "fixtures:listing-evidence": "bun run scripts/build-listing-evidence-candidates.ts",
@@ -26,6 +27,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@browserbasehq/sdk": "^2.10.0",
     "commander": "^14.0.3",
     "openai": "^6.8.1",
     "playwright": "^1.59.1",

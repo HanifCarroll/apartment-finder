@@ -25,6 +25,14 @@ Then add your API key to `.env`:
 OPENAI_API_KEY=...
 ```
 
+Optional Browserbase credentials are only needed for Browserbase smoke tests:
+
+```sh
+BROWSERBASE_API_KEY=...
+BROWSERBASE_PROJECT_ID=...
+BROWSER_BACKEND=local # local or browserbase
+```
+
 ## Classify One Image
 
 ```sh
@@ -256,9 +264,12 @@ Listing summary evals report accuracy by expected class and by `decision_source`
 bun run typecheck
 bun run test
 bun run smoke:browser
+bun run smoke:browser:sites --backend local
+bun run smoke:browser:sites --backend browserbase
 ```
 
 `bun run playwright:install` installs the Chromium browser used by Playwright smoke checks and future direct browser automation.
+After filling `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`, run `bun run smoke:browser:sites --backend browserbase` to check whether Browserbase can load Zonaprop, Argenprop, and Airbnb.
 
 Generated outputs, downloaded images, and secrets are ignored:
 
