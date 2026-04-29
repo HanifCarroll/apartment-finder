@@ -1,5 +1,6 @@
 import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "./playwriter-json";
 import { createPlaywriterSearchScript } from "./search-playwriter";
+import { findListingUrlsWithPlaywright } from "./search-playwright";
 import {
   detectSearchProvider,
   validateSearchUrl,
@@ -24,6 +25,10 @@ export type ListingSearchResult = {
 
 export { detectSearchProvider };
 
+export function searchBackendForProvider(provider: SearchProvider): "local-playwright" | "playwriter" {
+  return provider === "argenprop" || provider === "airbnb" ? "local-playwright" : "playwriter";
+}
+
 export async function findListingUrlsFromSearchUrl(
   searchUrl: string,
   maxListings: number,
@@ -31,6 +36,21 @@ export async function findListingUrlsFromSearchUrl(
 ): Promise<ListingSearchResult> {
   const provider = detectSearchProvider(searchUrl);
   const warnings = validateSearchUrl(searchUrl, provider);
+  if (searchBackendForProvider(provider) === "local-playwright") {
+    const payload = await findListingUrlsWithPlaywright(searchUrl, provider as "argenprop" | "airbnb", maxListings, maxPages);
+    const listingUrls = Array.from(new Set(payload.listing_urls)).slice(0, maxListings);
+    return {
+      provider,
+      search_url: payload.search_url,
+      page_url: payload.page_url,
+      page_urls: payload.page_urls || [payload.page_url],
+      listing_urls: listingUrls,
+      listing_count: listingUrls.length,
+      session_id: "local-playwright",
+      warnings,
+    };
+  }
+
   const sessionId = createPlaywriterSession();
   const stdout = runPlaywriterScript(
     sessionId,

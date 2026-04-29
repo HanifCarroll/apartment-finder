@@ -226,6 +226,8 @@ Supported search providers:
 - Argenprop search pages
 - Airbnb search pages
 
+Search discovery uses local Playwright for Argenprop and Airbnb. Zonaprop stays on Playwriter because local Playwright and Browserbase currently hit the site's bot check.
+
 The provider URL remains the source of truth for filters such as neighborhood, furnished, washer amenity, dates, and max dollar amount. For Airbnb, pass a URL with `checkin` and `checkout` when you want date-specific availability and pricing.
 
 Search audit records include `page_urls`, so you can confirm which result pages were visited.
