@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apartment Finder Fixture Candidate Review</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f7f5; color: #191919; }
+    header { position: sticky; top: 0; padding: 16px 24px; background: #fffffff2; border-bottom: 1px solid #ddd; z-index: 1; }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    header p { margin: 0; color: #555; }
+    main { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; padding: 16px; }
+    .card { display: grid; grid-template-columns: 46% 1fr; overflow: hidden; border: 1px solid #d7d7d2; border-radius: 8px; background: #fff; }
+    .media { min-height: 320px; background: #eee; }
+    img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .body { padding: 14px; }
+    .topline { display: flex; gap: 8px; align-items: center; color: #666; font-size: 12px; }
+    h2 { margin: 10px 0; font-size: 17px; }
+    .note, details, .vote p { color: #4b4b4b; font-size: 13px; line-height: 1.4; }
+    .review { display: grid; gap: 8px; margin: 12px 0; }
+    label { display: grid; gap: 4px; font-size: 12px; color: #555; }
+    input { min-height: 30px; border: 1px solid #bbb; border-radius: 4px; padding: 4px 8px; font: inherit; }
+    .vote { border-top: 1px solid #eee; padding: 8px 0; }
+    .confidence { margin-left: 6px; color: #666; }
+    a { color: #075c88; }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; } .card { grid-template-columns: 1fr; } .media { height: 360px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fixture Candidate Review</h1>
+    <p>7 provisional labels. Fill review fields or edit the JSONL before promoting to fixtures/images.jsonl.</p>
+  </header>
+  <main>
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/05/46/79/1200x1200/2024162615.jpg" alt="candidate-2024162615"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#1</span>
+            <code>candidate-2024162615</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/05/46/79/1200x1200/2024162615.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-monoambiente-nuevo-zona-terminal-de-omnibus-y-medicina-58054679.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.97</span>
+            <p>No washing machine is visible. The appliance on the right appears to be a water heater/boiler, not a washer. There is no laundry context to infer location.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.88</span>
+            <p>The washing machine is clearly visible inside the apartment’s kitchen/utility nook area, with no indicators that it is a communal laundry room.</p>
+          </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/46/57/69/1200x1200/2035665096.jpg" alt="candidate-2035665096"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#2</span>
+            <code>candidate-2035665096</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/46/57/69/1200x1200/2035665096.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-departamento-en-alquiler-estudiantil-marzo-diciembre-58465769.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.95</span>
+            <p>The image shows a small private kitchen area, but there is no washing machine visible. The white appliance on the right appears to be a refrigerator/freezer, not a washer.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.9</span>
+            <p>A front-loading washing machine is clearly visible in an enclosed, tiled utility area with a sink and cabinetry that appears to be part of the private apartment interior rather than a shared laundry facility.</p>
+          </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/46/57/69/1200x1200/2035665097.jpg" alt="candidate-2035665097"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#3</span>
+            <code>candidate-2035665097</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/46/57/69/1200x1200/2035665097.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-departamento-en-alquiler-estudiantil-marzo-diciembre-58465769.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.94</span>
+            <p>The photo shows a kitchen, not a laundry area, and there is no visible washing machine. Without a washer in view, the machine location cannot be inferred.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.82</span>
+            <p>The photo shows a front-loading washing machine built into a private room area with kitchen-style cabinetry and counters, with no indicators of a communal laundry facility.</p>
+          </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/46/57/69/1200x1200/2035665104.jpg" alt="candidate-2035665104"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#4</span>
+            <code>candidate-2035665104</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/46/57/69/1200x1200/2035665104.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-departamento-en-alquiler-estudiantil-marzo-diciembre-58465769.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.96</span>
+            <p>No washing machine is clearly visible in the photo. The prominent white appliance lacks washer features such as a front loading door or top controls and is more consistent with a refrigerator or storage cabinet. With no clear washer present, the location cannot be inferred.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.62</span>
+            <p>The washing machine is located directly inside the apartment’s tiled kitchen/utility area rather than a separate laundry room or shared corridor, indicating an in-unit placement. Context is limited (only partial view), so confidence is moderate.</p>
+          </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/90/71/51/1200x1200/2047567301.jpg" alt="candidate-2047567301"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#5</span>
+            <code>candidate-2047567301</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/90/71/51/1200x1200/2047567301.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-3-ambientes-con-balcon-terraza-en-belgrano!-amenities-58907151.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.96</span>
+            <p>The image shows a compact kitchen area but no washer is visible. A refrigerator, microwave, stove, and sink are present, which are not washing machines.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.78</span>
+            <p>A washing machine is clearly visible in the room with the apartment’s kitchen fixtures (cabinets, sink/counter). There are no indicators of a shared laundry room, so it’s most likely in-unit.</p>
+          </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/90/71/51/1200x1200/2047567304.jpg" alt="candidate-2047567304"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#6</span>
+            <code>candidate-2047567304</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/90/71/51/1200x1200/2047567304.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-3-ambientes-con-balcon-terraza-en-belgrano!-amenities-58907151.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.95</span>
+            <p>The image shows a private apartment kitchen/living area, but no washing machine is visible. Since there is no washer present to classify, the location remains unknown for washing-machine purposes.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.78</span>
+            <p>The washing machine is clearly visible inside the apartment in a utility/kitchenette area with private kitchen cabinetry and fixtures, not in a shared laundry facility.</p>
+          </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="media"><img src="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/94/42/49/1200x1200/2048504890.jpg" alt="candidate-2048504890"></div>
+        <div class="body">
+          <div class="topline">
+            <span>#7</span>
+            <code>candidate-2048504890</code>
+          </div>
+          <h2>UNKNOWN / washer: false</h2>
+          <p class="note">Model disagreement: at least one model saw a washer and at least one did not. Review carefully before labeling.</p>
+          <p><a href="https://imgar.zonapropcdn.com/avisos/resize/1/00/58/94/42/49/1200x1200/2048504890.jpg">Open image URL</a></p>
+          <p><a href="https://www.zonaprop.com.ar/propiedades/clasificado/alclapin-departamento-en-alquiler-2-ambientes-con-balcon-y-58944249.html">Source listing</a></p>
+          <div class="review">
+            <label>review_location <input value=""></label>
+            <label>review_contains_washing_machine <input value=""></label>
+          </div>
+          <details>
+            <summary>Model votes</summary>
+            
+          <div class="vote">
+            <strong>gpt-5.4-mini</strong>:
+            IN_UNIT / true
+            <span class="confidence">0.89</span>
+            <p>A washing machine is visible in the apartment's kitchen area. The image shows a private residential interior rather than a shared laundry room, and there are no signs of communal laundry facilities.</p>
+          </div>
+          <div class="vote">
+            <strong>gpt-5.4-nano</strong>:
+            UNKNOWN / false
+            <span class="confidence">0.88</span>
+            <p>A washing machine is not visible anywhere in the frame; only a small kitchen area is shown.</p>
+          </div>
+          </details>
+        </div>
+      </article></main>
+</body>
+</html>
