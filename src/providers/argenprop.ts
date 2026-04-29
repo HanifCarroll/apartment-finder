@@ -48,6 +48,28 @@ function parsePhotoCount(html: string): number | null {
   return galleryCounterMatch ? Number.parseInt(galleryCounterMatch, 10) : null;
 }
 
+function cleanText(text: string): string {
+  return decodeHtmlEntities(text)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseMetaContent(html: string, key: string): string {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`<meta[^>]+property=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${escaped}["']`, "i"),
+    new RegExp(`<meta[^>]+name=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${escaped}["']`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern)?.[1];
+    if (match) return cleanText(match);
+  }
+  return "";
+}
+
 function normalizeArgenpropImageUrl(rawUrl: string): string {
   const url = decodeHtmlEntities(rawUrl).replace(/[?#].*$/, "");
   return url.replace(/_(?:u_)?(?:xsmall|small|medium|large)(\.(?:jpe?g|png|webp))$/i, "_u_large$1");
@@ -99,6 +121,8 @@ export async function extractArgenpropListingImageUrls(
 
   return {
     provider: "argenprop",
+    listing_title: parseMetaContent(listingHtml, "og:title"),
+    listing_description: parseMetaContent(listingHtml, "og:description") || parseMetaContent(listingHtml, "description"),
     listing_url: listingUrl,
     page_url: listingUrl,
     image_urls: imageUrls,

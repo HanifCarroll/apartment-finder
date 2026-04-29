@@ -49,6 +49,22 @@ function uniqueZonapropImageUrls(urls) {
   return Array.from(byId.values()).slice(0, maxImages * 4);
 }
 
+function cleanText(text) {
+  const div = document.createElement('div');
+  div.innerHTML = String(text || '');
+  return (div.textContent || div.innerText || '')
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+function metaContent(key) {
+  const selector = [
+    \`meta[property="\${key}"]\`,
+    \`meta[name="\${key}"]\`,
+  ].join(',');
+  return cleanText(document.querySelector(selector)?.getAttribute('content') || '');
+}
+
 function extractGalleryMeta() {
   const containers = Array.from(document.querySelectorAll('#multimedia-content, #new-gallery-portal, [class*="gallery"], [class*="multimedia"]'))
     .map((el) => (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim())
@@ -150,6 +166,8 @@ const imageUrls = uniqueZonapropImageUrls([
 ]);
 const payload = {
   listing_url: listingUrl,
+  listing_title: metaContent('og:title') || cleanText(document.querySelector('h1')?.textContent || ''),
+  listing_description: metaContent('og:description') || metaContent('description'),
   page_url: state.page.url(),
   clicked_gallery: clickedGallery,
   gallery_count: galleryMeta.gallery_count,

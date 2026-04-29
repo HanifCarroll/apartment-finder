@@ -37,6 +37,29 @@ function parsePictureCount(html: string): number | null {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
+function cleanText(text: string): string {
+  return normalizeAmenityText(text)
+    .replace(/\\"/g, "\"")
+    .replace(/\\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseMetaContent(html: string, key: string): string {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`<meta[^>]+property=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${escaped}["']`, "i"),
+    new RegExp(`<meta[^>]+name=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']${escaped}["']`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern)?.[1];
+    if (match) return cleanText(decodeHtmlEntities(match));
+  }
+  return "";
+}
+
 function normalizeAmenityText(text: string): string {
   return decodeHtmlEntities(text)
     .replace(/\\u00a0/g, " ")
@@ -128,6 +151,8 @@ export async function extractAirbnbListingImageUrls(
 
   return {
     provider: "airbnb",
+    listing_title: parseMetaContent(html, "og:title"),
+    listing_description: parseMetaContent(html, "og:description") || parseMetaContent(html, "description"),
     ...laundryAmenity,
     metadata_laundry_signals: airbnbSignal ? [airbnbSignal] : [],
     listing_url: listingUrl,

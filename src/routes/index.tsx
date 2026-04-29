@@ -21,7 +21,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +43,8 @@ const COMMON_NEIGHBORHOOD_KEYS = [
   "caballito",
 ];
 
+type ResultFilter = "ALL" | "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN";
+
 type FormState = {
   mode: "filters" | "url";
   provider: "zonaprop" | "argenprop" | "airbnb";
@@ -57,8 +58,6 @@ type FormState = {
   maxDormitorios: string;
   checkIn: string;
   checkOut: string;
-  discoverOnly: boolean;
-  includeAll: boolean;
   maxListings: string;
   maxPages: string;
   maxImages: string;
@@ -79,8 +78,6 @@ const defaultForm: FormState = {
   maxDormitorios: "",
   checkIn: "2026-06-14",
   checkOut: "2026-08-23",
-  discoverOnly: true,
-  includeAll: false,
   maxListings: "20",
   maxPages: "3",
   maxImages: String(DEFAULT_MAX_IMAGES),
@@ -91,6 +88,7 @@ const defaultForm: FormState = {
 function HomePage() {
   const runSearchFn = useServerFn(runSearch);
   const [form, setForm] = React.useState<FormState>(defaultForm);
+  const [resultFilter, setResultFilter] = React.useState<ResultFilter>("ALL");
 
   const searchMutation = useMutation({
     mutationKey: ["search-scan", form.mode, form.provider],
@@ -169,23 +167,9 @@ function HomePage() {
                     </Field>
                   </div>
 
-                  <div className="grid gap-2 rounded-md border p-3">
-                    <ToggleRow
-                      id="discoverOnly"
-                      checked={form.discoverOnly}
-                      label="Discover listings only"
-                      onChange={(checked) => updateForm(setForm, { discoverOnly: checked })}
-                    />
-                    <ToggleRow
-                      id="includeAll"
-                      checked={form.includeAll}
-                      label="Show every scanned listing"
-                      onChange={(checked) => updateForm(setForm, { includeAll: checked })}
-                    />
-                  </div>
-
-                  {!form.discoverOnly ? (
-                    <div className="grid gap-2 rounded-md border p-3">
+                  <details className="rounded-md border p-3">
+                    <summary className="cursor-pointer text-sm font-medium">Advanced scan settings</summary>
+                    <div className="mt-3 grid gap-2">
                       <Field label="First-pass model" htmlFor="model">
                         <Input
                           id="model"
@@ -210,13 +194,13 @@ function HomePage() {
                         />
                       </Field>
                     </div>
-                  ) : null}
+                  </details>
                 </div>
 
                 <div className="sticky bottom-0 mt-auto border-t bg-card pt-3">
                   <Button className="w-full" type="submit" disabled={searchMutation.isPending}>
                     {searchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                    {form.discoverOnly ? "Discover listings" : "Scan listings"}
+                    Scan listings
                   </Button>
                 </div>
               </form>
@@ -238,7 +222,7 @@ function HomePage() {
                       {result.searchUrl}
                     </a>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Ready to run discovery</p>
+                    <p className="text-xs text-muted-foreground">Ready to scan listings</p>
                   )}
                 </div>
                 {result ? <ResultSummary result={result} /> : null}
@@ -248,16 +232,8 @@ function HomePage() {
                   result={result}
                   error={searchMutation.error}
                   pending={searchMutation.isPending}
-                  onScanDiscovered={(searchUrl) => {
-                    const nextForm: FormState = {
-                      ...form,
-                      mode: "url",
-                      searchUrl,
-                      discoverOnly: false,
-                    };
-                    setForm(nextForm);
-                    searchMutation.mutate(nextForm);
-                  }}
+                  filter={resultFilter}
+                  onFilterChange={setResultFilter}
                 />
               </div>
             </div>
@@ -398,12 +374,14 @@ function ResultsPanel({
   result,
   error,
   pending,
-  onScanDiscovered,
+  filter,
+  onFilterChange,
 }: {
   result?: SearchUiResult;
   error: Error | null;
   pending: boolean;
-  onScanDiscovered: (searchUrl: string) => void;
+  filter: ResultFilter;
+  onFilterChange: (filter: ResultFilter) => void;
 }) {
   if (pending) {
     return (
@@ -430,28 +408,21 @@ function ResultsPanel({
       <StateCard
         icon={<Building2 className="h-5 w-5" />}
         title="Ready"
-        text="Run discovery first to confirm pagination and listing extraction before spending model calls."
+        text="Build a search from filters or paste a search URL, then scan listings for washer evidence."
       />
     );
   }
 
+  const filteredItems = result.items.filter((item) => matchesResultFilter(item, filter));
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <Badge variant="secondary" className="gap-1.5">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          {result.discoverOnly ? "Discovery complete" : "Scan complete"}
+          Scan complete
         </Badge>
-        {result.discoverOnly ? (
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            onClick={() => onScanDiscovered(result.searchUrl)}
-          >
-            Scan these listings
-          </Button>
-        ) : null}
+        <ResultFilterTabs result={result} value={filter} onChange={onFilterChange} />
         {result.warnings.map((warning) => (
           <Badge key={warning} variant="outline" className="max-w-full truncate text-muted-foreground">
             {warning}
@@ -464,26 +435,53 @@ function ResultsPanel({
         ))}
       </div>
 
-      {result.discoverOnly ? (
-        <div className="overflow-hidden rounded-md border">
-          <div className="grid grid-cols-[48px_minmax(0,1fr)_80px] border-b bg-muted/60 px-3 py-2 text-xs font-medium uppercase text-muted-foreground">
-            <div>#</div>
-            <div>Listing</div>
-            <div className="text-right">Action</div>
+      <div className="space-y-3">
+        {filteredItems.length ? (
+          filteredItems.map((item, index) => (
+            <ListingResult key={item.listingUrl} item={item} index={index + 1} />
+          ))
+        ) : (
+          <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
+            No listings match this filter.
           </div>
-          <div className="divide-y">
-            {result.listingUrls.map((url, index) => (
-              <ListingUrlRow key={url} url={url} index={index + 1} />
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {result.items.map((item) => (
-            <ListingResult key={item.listingUrl} item={item} />
-          ))}
-        </div>
-      )}
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResultFilterTabs({
+  result,
+  value,
+  onChange,
+}: {
+  result: SearchUiResult;
+  value: ResultFilter;
+  onChange: (filter: ResultFilter) => void;
+}) {
+  const counts = React.useMemo(() => countResultFilters(result.items), [result.items]);
+  const options: Array<{ value: ResultFilter; label: string; count: number }> = [
+    { value: "ALL", label: "All", count: result.items.length },
+    { value: "IN_UNIT", label: "In-unit", count: counts.IN_UNIT },
+    { value: "SHARED_BUILDING", label: "Shared", count: counts.SHARED_BUILDING },
+    { value: "UNKNOWN", label: "Unknown", count: counts.UNKNOWN },
+  ];
+
+  return (
+    <div className="flex rounded-md bg-muted p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={[
+            "rounded px-2.5 py-1 text-xs font-medium",
+            value === option.value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+          ].join(" ")}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label} {option.count}
+        </button>
+      ))}
     </div>
   );
 }
@@ -508,80 +506,127 @@ function SummaryPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ListingUrlRow({ url, index }: { url: string; index: number }) {
-  const listing = describeListingUrl(url);
+function ListingResult({ item, index }: { item: SearchUiResult["items"][number]; index: number }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const listing = describeListingUrl(item.listingUrl, item.title);
+  const decision = item.failed ? "FAILED" : item.decision || "UNKNOWN";
 
   return (
-    <div className="grid grid-cols-[48px_minmax(0,1fr)_80px] items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted/50">
-      <div className="font-mono text-xs text-muted-foreground">{index}</div>
-      <div className="min-w-0">
-        <a href={url} target="_blank" rel="noreferrer" className="block truncate font-medium hover:underline">
-          {listing.title}
-        </a>
-        <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="shrink-0">{listing.id || listing.host}</span>
-          <span className="truncate">{listing.path}</span>
+    <Card className="overflow-hidden">
+      <button
+        type="button"
+        className="grid w-full grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left hover:bg-muted/50"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="font-mono text-xs text-muted-foreground">{index}</div>
+        <div className="min-w-0">
+          <div className="truncate font-medium">{listing.title}</div>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{listing.id || listing.host}</span>
+            <span>{item.imageCount ?? item.imageUrls.length}/{item.galleryCount ?? "?"} photos</span>
+            {item.source ? <span>{item.source}</span> : null}
+          </div>
         </div>
-      </div>
-      <div className="text-right">
-        <Button asChild variant="outline" size="sm" className="h-8 px-2.5">
-          <a href={url} target="_blank" rel="noreferrer">
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open
-          </a>
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ListingResult({ item }: { item: SearchUiResult["items"][number] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Badge variant={item.decision === "IN_UNIT" ? "default" : item.failed ? "destructive" : "outline"}>
-            {item.failed ? "FAILED" : item.decision || "UNKNOWN"}
+            {decision}
           </Badge>
           {item.confidence ? <Badge variant="secondary">{item.confidence}</Badge> : null}
-          {item.source ? <Badge variant="outline">{item.source}</Badge> : null}
         </div>
-        <CardDescription>
-          <a href={item.listingUrl} target="_blank" rel="noreferrer" className="break-words hover:underline">
-            {item.listingUrl}
-          </a>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {item.amenity ? <div className="text-sm text-muted-foreground">{item.amenity}</div> : null}
-        <div className="text-sm text-muted-foreground">
-          Gallery: {item.imageCount ?? "?"}/{item.galleryCount ?? "?"} photos {item.gallerySource || ""}
-        </div>
-        {item.error ? <div className="rounded-md bg-muted p-3 text-sm text-destructive">{item.error}</div> : null}
-        {item.evidence.length ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {item.evidence.map((evidence) => (
-              <a
-                key={`${item.listingUrl}-${evidence.photo}-${evidence.imageUrl}`}
-                href={evidence.imageUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border p-3 text-sm hover:bg-muted"
-              >
-                <div className="font-medium">Photo {evidence.photo ?? "?"}: {evidence.label || "UNKNOWN"}</div>
-                <div className="text-muted-foreground">
-                  {typeof evidence.confidence === "number" ? evidence.confidence.toFixed(2) : "no confidence"}
-                  {evidence.washer ? " washer visible" : ""}
-                </div>
+      </button>
+
+      {expanded ? (
+        <CardContent className="space-y-4 border-t p-3">
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" className="h-8 px-2.5">
+              <a href={item.listingUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open listing
               </a>
-            ))}
+            </Button>
+            {item.amenity ? <Badge variant="outline">{item.amenity}</Badge> : null}
+            <Badge variant="outline">Gallery {item.imageCount ?? item.imageUrls.length}/{item.galleryCount ?? "?"}</Badge>
           </div>
-        ) : null}
-      </CardContent>
+
+          {item.description ? (
+            <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{item.description}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">No description extracted for this listing.</p>
+          )}
+
+          {item.error ? <div className="rounded-md bg-muted p-3 text-sm text-destructive">{item.error}</div> : null}
+
+          {item.evidence.length ? (
+            <div className="space-y-2">
+              <div className="text-xs font-medium uppercase text-muted-foreground">Washer Evidence</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {item.evidence.map((evidence) => (
+                  <a
+                    key={`${item.listingUrl}-${evidence.photo}-${evidence.imageUrl}`}
+                    href={evidence.imageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md border p-3 text-sm hover:bg-muted"
+                  >
+                    <div className="font-medium">Photo {typeof evidence.photo === "number" ? evidence.photo + 1 : "?"}: {evidence.label || "UNKNOWN"}</div>
+                    <div className="text-muted-foreground">
+                      {typeof evidence.confidence === "number" ? evidence.confidence.toFixed(2) : "no confidence"}
+                      {evidence.washer ? " washer visible" : ""}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {item.imageUrls.length ? (
+            <div className="space-y-2">
+              <div className="text-xs font-medium uppercase text-muted-foreground">Listing Photos</div>
+              <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-6">
+                {item.imageUrls.map((url, photoIndex) => (
+                  <a
+                    key={`${item.listingUrl}-${url}`}
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
+                  >
+                    <img src={url} alt={`${listing.title} photo ${photoIndex + 1}`} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
+                    <span className="absolute left-1 top-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
+                      {photoIndex + 1}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
 
+function matchesResultFilter(item: SearchUiResult["items"][number], filter: ResultFilter): boolean {
+  if (filter === "ALL") return true;
+  const decision = item.failed ? "UNKNOWN" : item.decision || "UNKNOWN";
+  if (filter === "UNKNOWN") return decision !== "IN_UNIT" && decision !== "SHARED_BUILDING";
+  return decision === filter;
+}
+
+function countResultFilters(items: SearchUiResult["items"]): Record<ResultFilter, number> {
+  const counts: Record<ResultFilter, number> = {
+    ALL: items.length,
+    IN_UNIT: 0,
+    SHARED_BUILDING: 0,
+    UNKNOWN: 0,
+  };
+  for (const item of items) {
+    if (item.decision === "IN_UNIT") counts.IN_UNIT += 1;
+    else if (item.decision === "SHARED_BUILDING") counts.SHARED_BUILDING += 1;
+    else counts.UNKNOWN += 1;
+  }
+  return counts;
+}
 function Field({
   label,
   htmlFor,
@@ -595,25 +640,6 @@ function Field({
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-    </div>
-  );
-}
-
-function ToggleRow({
-  id,
-  checked,
-  label,
-  onChange,
-}: {
-  id: string;
-  checked: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <Checkbox id={id} checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <Label htmlFor={id} className="text-sm">{label}</Label>
     </div>
   );
 }
@@ -785,7 +811,7 @@ function normalizeSearchText(value: string): string {
     .toLowerCase();
 }
 
-function describeListingUrl(url: string): { host: string; id: string; path: string; title: string } {
+function describeListingUrl(url: string, title?: string): { host: string; id: string; path: string; title: string } {
   try {
     const parsed = new URL(url);
     const finalSegment = parsed.pathname.split("/").filter(Boolean).at(-1) || parsed.hostname;
@@ -797,14 +823,14 @@ function describeListingUrl(url: string): { host: string; id: string; path: stri
       host: parsed.hostname.replace(/^www\./, ""),
       id,
       path: parsed.pathname,
-      title: titleFromSlug(slug),
+      title: title || titleFromSlug(slug),
     };
   } catch {
     return {
       host: "",
       id: "",
       path: url,
-      title: url,
+      title: title || url,
     };
   }
 }
@@ -869,8 +895,6 @@ function toSearchPayload(form: FormState) {
     maxDormitorios: optionalNumber(form.maxDormitorios),
     checkIn: form.checkIn || undefined,
     checkOut: form.checkOut || undefined,
-    discoverOnly: form.discoverOnly,
-    includeAll: form.includeAll,
     maxListings: optionalNumber(form.maxListings) ?? 20,
     maxPages: optionalNumber(form.maxPages) ?? 3,
     maxImages: optionalNumber(form.maxImages) ?? DEFAULT_MAX_IMAGES,

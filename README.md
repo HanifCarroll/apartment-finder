@@ -256,15 +256,15 @@ Search audit records include `page_urls`, so you can confirm which result pages 
 
 ## Web UI
 
-The TanStack Start UI wraps the same `src/core` services used by the CLI. It supports provider filters, typeahead neighborhood multi-select, raw search URLs, discover-only runs, and full model-backed scans.
+The TanStack Start UI wraps the same `src/core` services used by the CLI. It supports provider filters, typeahead neighborhood multi-select, raw search URLs, model-backed scans, result filtering by washer decision, and expandable listing rows with extracted photos and descriptions.
 
 ```sh
 bun run dev
 ```
 
-Open `http://localhost:3000`. Discovery runs do not require `OPENAI_API_KEY`; full scans do.
+Open `http://localhost:3000`. Web scans require `OPENAI_API_KEY`.
 
-Useful flags:
+Useful CLI flags:
 
 ```sh
 --discover-only   # only extract listing URLs, no model calls

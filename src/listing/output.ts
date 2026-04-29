@@ -33,7 +33,10 @@ export type ListingExtractionRecord = {
   ok?: boolean;
   type?: string;
   provider?: string;
+  listing_title?: string;
+  listing_description?: string;
   listing_url?: string;
+  image_urls?: string[];
   gallery_count?: number | null;
   image_count?: number;
   gallery_count_matches_extracted?: boolean | null;
