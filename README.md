@@ -178,6 +178,33 @@ pbpaste | bun run scan
 
 Use `--json` to print one summary JSON object per line.
 
+## Search And Scan
+
+Use `bun run search` when you have a provider search/results URL instead of individual listing URLs. The command discovers listing URLs from the result page, classifies each listing, and prints only `IN_UNIT` matches by default:
+
+```sh
+bun run search \
+  --search-url "https://www.zonaprop.com.ar/inmuebles-alquiler-temporal-nunez-las-canitas-con-amoblado-menos-1500-dolar.html" \
+  --max-listings 20 \
+  --out results/search-zonaprop.jsonl
+```
+
+Supported search providers:
+
+- Zonaprop search pages
+- Argenprop search pages
+- Airbnb search pages
+
+The provider URL remains the source of truth for filters such as neighborhood, furnished, washer amenity, dates, and max dollar amount. For Airbnb, pass a URL with `checkin` and `checkout` when you want date-specific availability and pricing.
+
+Useful flags:
+
+```sh
+--discover-only # only extract listing URLs, no model calls
+--all           # print every classified listing instead of only IN_UNIT matches
+--json          # print JSON lines
+```
+
 ## Evaluate Fixtures
 
 Image labels live in `fixtures/images.jsonl`.

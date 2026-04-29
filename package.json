@@ -11,6 +11,7 @@
     "fair:listings": "bun run scripts/run-fair-listing-run.ts",
     "summary:listings": "bun run scripts/run-listing-summaries.ts",
     "scan": "bun run scripts/scan-listings.ts",
+    "search": "bun run scripts/search-listings.ts",
     "report": "bun run scripts/evidence-report.ts",
     "smoke:extractions": "bun run scripts/smoke-listing-extraction.ts",
     "listings:zonaprop": "bun run scripts/find-zonaprop-listings.ts",
