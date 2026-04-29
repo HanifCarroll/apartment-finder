@@ -163,6 +163,18 @@ bun run smoke:search
 bun run smoke:search --provider airbnb
 ```
 
+To audit fresh search-result extraction across providers and generate a review page:
+
+```sh
+bun run audit:extractions \
+  --max-listings 4 \
+  --max-pages 1 \
+  --max-images 20 \
+  --refresh-extraction
+```
+
+This writes `fixtures/search-extraction-audit-2026-04-29.jsonl` and `fixtures/review-search-extractions-2026-04-29.html`.
+
 ## Scan Multiple Listings
 
 Put listing URLs in a newline-delimited file:

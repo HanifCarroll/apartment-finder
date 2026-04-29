@@ -23,6 +23,7 @@
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",
     "fixtures:listing-evidence": "bun run scripts/build-listing-evidence-candidates.ts",
     "fixtures:promote": "bun run scripts/promote-reviewed-candidates.ts",
+    "audit:extractions": "bun run scripts/audit-search-extractions.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "playwright:install": "playwright install chromium",
