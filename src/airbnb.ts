@@ -44,11 +44,14 @@ function photoId(url: string): string {
 export function uniqueAirbnbImageUrls(urls: string[], roomId: string, maxImages: number): string[] {
   const byId = new Map<string, string>();
   const hostingPath = `/Hosting-${roomId}/`;
+  const directListingPhotoPattern = /a0\.muscache\.com\/im\/pictures\/[0-9a-f-]+\.(?:jpe?g|png|webp)(?:[?#].*)?$/i;
 
   for (const rawUrl of urls) {
     if (!rawUrl.includes("a0.muscache.com/im/pictures/")) continue;
-    if (!rawUrl.includes(hostingPath)) continue;
     const url = normalizeAirbnbImageUrl(rawUrl);
+    const isRoomHostingPhoto = url.includes(hostingPath);
+    const isDirectListingPhoto = directListingPhotoPattern.test(url);
+    if (!isRoomHostingPhoto && !isDirectListingPhoto) continue;
     byId.set(photoId(url), url);
   }
 

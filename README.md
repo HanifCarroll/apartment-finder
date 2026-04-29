@@ -185,6 +185,8 @@ bun run eval:listing-summaries \
 
 Current best benchmark on the original 40 labeled Zonaprop listings was the two-pass summary workflow with `gpt-5.4-mini` plus `gpt-5.4` escalation: `39/40` overall, `10/10` in-unit, `16/17` shared-building, and `13/13` unknown.
 
+The first Airbnb fixture batch scored `13/14` with the same two-pass workflow: `6/6` in-unit, `4/4` unknown, and `3/4` shared-building.
+
 ## Development
 
 ```sh

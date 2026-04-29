@@ -55,8 +55,9 @@ export function isStrongEvidence(evidence: ListingEvidence, location: LocationLa
     return ["clear", "partial"].includes(evidence.washing_machine_visibility) &&
       evidence.confidence >= 0.85;
   }
-  return evidence.washing_machine_visibility === "clear" &&
-    evidence.confidence >= 0.85;
+  return evidence.washing_machine_visibility === "clear"
+    ? evidence.confidence >= 0.85
+    : evidence.washing_machine_visibility === "partial" && evidence.confidence >= 0.95;
 }
 
 function aggregateAnyInUnit(records: ClassificationRecordLike[]): ListingAggregate {
