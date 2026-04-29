@@ -56,6 +56,17 @@ bun run classify \
   --out results/listing-summary.jsonl
 ```
 
+By default this prints a concise listing-level result:
+
+```text
+IN_UNIT high
+evidence: photo 16 0.98, photo 14 0.97, photo 2 0.93
+gallery: airbnb 32/32 photos cache
+best_url: https://a0.muscache.com/im/pictures/...
+```
+
+Use `--json` to print the raw `listing_summary` JSON instead.
+
 The summary record includes:
 
 - `decision`: `IN_UNIT`, `SHARED_BUILDING`, `UNKNOWN`, or `CONFLICTING`
@@ -109,6 +120,38 @@ bun run smoke:extractions \
   --limit 1 \
   --refresh-extraction
 ```
+
+## Scan Multiple Listings
+
+Put listing URLs in a newline-delimited file:
+
+```text
+https://www.airbnb.com/rooms/24077932
+https://www.argenprop.com/departamento-en-alquiler-temporal-en-nunez-4-ambientes--18636518
+```
+
+Then scan them:
+
+```sh
+bun run scan \
+  --input urls.txt \
+  --out results/scan.jsonl
+```
+
+The default output is tab-separated for easy filtering:
+
+```text
+decision  confidence  gallery  evidence  best_url  listing_url
+IN_UNIT   high        32/32    photo 16 0.98, photo 14 0.97  https://...  https://...
+```
+
+You can also pipe URLs through stdin:
+
+```sh
+pbpaste | bun run scan
+```
+
+Use `--json` to print one summary JSON object per line.
 
 ## Evaluate Fixtures
 

@@ -1,6 +1,11 @@
 import { parseArgs } from "./args";
 import { runClassification } from "./classifier-runner";
 import { appendJsonl } from "./jsonl";
+import {
+  findListingExtractionRecord,
+  findListingSummaryRecord,
+  formatListingSummaryText,
+} from "./listing-output";
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -15,14 +20,13 @@ async function main() {
     await appendJsonl(args.outPath, records);
   }
 
-  const output = args.listingSummary
-    ? records.find((record) =>
-      record &&
-      typeof record === "object" &&
-      (record as { type?: string }).type === "listing_summary"
-    ) || records
-    : records;
-  console.log(JSON.stringify(output, null, 2));
+  const summary = args.listingSummary ? findListingSummaryRecord(records) : undefined;
+  if (summary && !args.jsonOutput) {
+    console.log(formatListingSummaryText(summary, findListingExtractionRecord(records)));
+    return;
+  }
+
+  console.log(JSON.stringify(summary || records, null, 2));
 }
 
 main().catch((error) => {

@@ -31,6 +31,7 @@ Options:
   --escalation-model <model> Model for second-pass listing summary checks. Defaults to ${DEFAULT_ESCALATION_MODEL}.
   --classify-all      Classify every extracted listing photo. Default stops once a washer is found.
   --extract-only      Only extract listing photo URLs. Does not require OPENAI_API_KEY.
+  --json              Print raw JSON instead of concise listing summary text.
 `);
   process.exit(exitCode);
 }
@@ -49,6 +50,7 @@ export function parseArgs(argv: string[]): Args {
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     classifyAll: false,
     extractOnly: false,
+    jsonOutput: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -137,6 +139,9 @@ export function parseArgs(argv: string[]): Args {
         break;
       case "--extract-only":
         args.extractOnly = true;
+        break;
+      case "--json":
+        args.jsonOutput = true;
         break;
       default:
         usage();

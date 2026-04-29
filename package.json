@@ -10,6 +10,7 @@
     "eval:listing-summaries": "bun run scripts/evaluate-listing-summaries.ts",
     "fair:listings": "bun run scripts/run-fair-listing-run.ts",
     "summary:listings": "bun run scripts/run-listing-summaries.ts",
+    "scan": "bun run scripts/scan-listings.ts",
     "smoke:extractions": "bun run scripts/smoke-listing-extraction.ts",
     "listings:zonaprop": "bun run scripts/find-zonaprop-listings.ts",
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",

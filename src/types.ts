@@ -39,6 +39,7 @@ export type Args = {
   escalationModel: string;
   classifyAll: boolean;
   extractOnly: boolean;
+  jsonOutput: boolean;
 };
 
 export type ImagePayload = {

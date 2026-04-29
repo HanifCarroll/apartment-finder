@@ -336,6 +336,7 @@ async function main() {
       escalationModel: args.escalationModel,
       classifyAll: true,
       extractOnly: false,
+      jsonOutput: true,
     };
 
     const records = await (cachedExtraction

@@ -124,6 +124,7 @@ async function main() {
       escalationModel: "gpt-5.4",
       classifyAll: true,
       extractOnly: false,
+      jsonOutput: true,
     };
 
     const records = await runClassification(classificationArgs).catch((error) => [{
