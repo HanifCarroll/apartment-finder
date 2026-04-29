@@ -92,6 +92,7 @@ export type SearchScanJob = {
   status: "running" | "completed" | "failed";
   createdAt: number;
   stage: string;
+  startedListings: number;
   completedListings: number;
   totalListings: number;
   result?: SearchUiResult;
@@ -130,6 +131,7 @@ export const startSearchScan = createServerFn({ method: "POST" })
       status: "running",
       createdAt: Date.now(),
       stage: "Preparing search",
+      startedListings: 0,
       completedListings: 0,
       totalListings: 0,
     });
@@ -214,7 +216,8 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
       ({ index, total }) => {
         const job = searchJobs.get(jobId);
         if (!job) return;
-        job.stage = `Scanning listing ${Math.min(index + 1, total)}/${total}`;
+        job.stage = "Scanning listings";
+        job.startedListings = Math.max(job.startedListings, Math.min(index + 1, total));
         job.totalListings = total;
       },
       (item, index) => {
@@ -222,7 +225,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
         if (!job) return;
         partialItems[index] = toUiItem(item);
         job.completedListings = partialItems.filter(Boolean).length;
-        job.stage = `Classified ${job.completedListings}/${job.totalListings || "?"} listings`;
+        job.stage = job.completedListings === job.totalListings ? "Finalizing results" : "Scanning listings";
         job.result = {
           provider: job.result?.provider || "searching",
           searchUrl,
@@ -243,6 +246,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
       status: "completed",
       createdAt: searchJobs.get(jobId)?.createdAt || Date.now(),
       stage: "Completed",
+      startedListings: result.search.listing_urls.length,
       completedListings: result.items.length,
       totalListings: result.search.listing_urls.length,
       result: {
@@ -265,6 +269,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
       status: "failed",
       createdAt: job?.createdAt || Date.now(),
       stage: "Failed",
+      startedListings: job?.startedListings || 0,
       completedListings: job?.completedListings || 0,
       totalListings: job?.totalListings || 0,
       result: job?.result,

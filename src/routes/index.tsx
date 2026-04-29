@@ -409,7 +409,7 @@ function ResultsPanel({
   result?: SearchUiResult;
   error: Error | null;
   pending: boolean;
-  loadingStage: { index: number; total: number; label: string };
+  loadingStage: { title: string; label: string };
   filter: ResultFilter;
   onFilterChange: (filter: ResultFilter) => void;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
@@ -418,7 +418,7 @@ function ResultsPanel({
     return (
       <StateCard
         icon={<Loader2 className="h-5 w-5 animate-spin" />}
-        title={`Stage ${loadingStage.index + 1}/${loadingStage.total}`}
+        title={loadingStage.title}
         text={loadingStage.label}
       />
     );
@@ -451,7 +451,7 @@ function ResultsPanel({
       {pending ? (
         <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Stage {loadingStage.index + 1}/{loadingStage.total}: {loadingStage.label}</span>
+          <span>{loadingStage.title}: {loadingStage.label}</span>
         </div>
       ) : null}
 
@@ -755,7 +755,7 @@ function countResultFilters(items: SearchUiResult["items"]): Record<ResultFilter
   return counts;
 }
 
-function useLoadingStage(active: boolean, job?: SearchScanJob): { index: number; total: number; label: string } {
+function useLoadingStage(active: boolean, job?: SearchScanJob): { title: string; label: string } {
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
@@ -781,16 +781,22 @@ function useLoadingStage(active: boolean, job?: SearchScanJob): { index: number;
           : 4;
 
   if (job?.status === "running" && job.totalListings > 0) {
+    if (job.completedListings === 0) {
+      const started = Math.max(job.startedListings, 1);
+      return {
+        title: "Scanning listings",
+        label: `Started ${started}/${job.totalListings}. Results will appear here as each listing finishes.`,
+      };
+    }
+
     return {
-      index: 3,
-      total: LOADING_STAGES.length,
-      label: `${job.stage} (${job.completedListings}/${job.totalListings})`,
+      title: "Scanning listings",
+      label: `${job.completedListings}/${job.totalListings} complete. Checking the remaining listings now.`,
     };
   }
 
   return {
-    index,
-    total: LOADING_STAGES.length,
+    title: active ? "Working" : "Ready",
     label: job?.stage || LOADING_STAGES[index],
   };
 }
