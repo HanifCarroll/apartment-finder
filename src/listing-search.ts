@@ -9,6 +9,7 @@ export type ListingSearchResult = {
   provider: SearchProvider;
   search_url: string;
   page_url: string;
+  page_urls: string[];
   listing_urls: string[];
   listing_count: number;
   session_id: string;
@@ -54,11 +55,17 @@ function validateSearchUrl(searchUrl: string, provider: SearchProvider): string[
   return warnings;
 }
 
-function createPlaywriterSearchScript(searchUrl: string, provider: SearchProvider, maxListings: number): string {
+function createPlaywriterSearchScript(
+  searchUrl: string,
+  provider: SearchProvider,
+  maxListings: number,
+  maxPages: number,
+): string {
   return `
 const searchUrl = ${JSON.stringify(searchUrl)};
 const provider = ${JSON.stringify(provider)};
 const maxListings = ${JSON.stringify(maxListings)};
+const maxPages = ${JSON.stringify(maxPages)};
 
 async function scrollResults() {
   let previousHeight = 0;
@@ -71,58 +78,164 @@ async function scrollResults() {
   }
 }
 
+async function collectListingUrls() {
+  return state.page.evaluate(({ provider }) => {
+    function normalizeUrl(rawUrl) {
+      try {
+        const parsed = new URL(rawUrl, location.href);
+        parsed.hash = '';
+        if (provider === 'airbnb') {
+          const roomId = parsed.pathname.match(/\\/rooms\\/(\\d+)/)?.[1];
+          if (!roomId) return null;
+          return new URL('/rooms/' + roomId, 'https://www.airbnb.com').href;
+        }
+        if (provider === 'zonaprop') {
+          if (!/\\/propiedades\\/clasificado\\//.test(parsed.pathname)) return null;
+          parsed.search = '';
+          return parsed.href;
+        }
+        if (provider === 'argenprop') {
+          if (!/--\\d+$/.test(parsed.pathname)) return null;
+          parsed.search = '';
+          return parsed.href;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    }
+
+    function isListingHref(href) {
+      if (provider === 'airbnb') return /\\/rooms\\/\\d+/.test(href);
+      if (provider === 'zonaprop') return /\\/propiedades\\/clasificado\\//.test(href);
+      if (provider === 'argenprop') return /--\\d+(?:[/?#]|$)/.test(href);
+      return false;
+    }
+
+    const urls = new Set();
+    for (const anchor of document.querySelectorAll('a[href]')) {
+      const href = anchor.getAttribute('href') || '';
+      if (!isListingHref(href)) continue;
+      const normalized = normalizeUrl(href);
+      if (normalized) urls.add(normalized);
+    }
+    return Array.from(urls);
+  }, { provider });
+}
+
+async function clickNextPage(nextPageNumber) {
+  const nextHref = await state.page.evaluate(({ provider, nextPageNumber }) => {
+    function usableHref(anchor) {
+      const href = anchor.getAttribute('href');
+      if (!href || href === '#' || href.startsWith('javascript:')) return null;
+      try { return new URL(href, location.href).href; } catch { return null; }
+    }
+
+    const anchors = Array.from(document.querySelectorAll('a[href]'));
+    if (provider === 'zonaprop') {
+      const arrow = anchors.find((anchor) => (anchor.getAttribute('class') || '').includes('paging-module__page-arrow'));
+      if (arrow) return usableHref(arrow);
+      const numbered = anchors.find((anchor) => {
+        const text = (anchor.innerText || anchor.textContent || '').trim();
+        return text === String(nextPageNumber) && /pagina-\\d+\\.html/i.test(anchor.getAttribute('href') || '');
+      });
+      if (numbered) return usableHref(numbered);
+    }
+
+    if (provider === 'argenprop') {
+      const byText = anchors.find((anchor) => {
+        const text = (anchor.innerText || anchor.textContent || '').trim();
+        return text === String(nextPageNumber);
+      });
+      if (byText) return usableHref(byText);
+
+      const current = location.href;
+      if (/([?&])pagina-\\d+/.test(current)) {
+        return current.replace(/([?&])pagina-\\d+/, '$1pagina-' + nextPageNumber);
+      }
+      return current + (current.includes('?') ? '&' : '?') + 'pagina-' + nextPageNumber;
+    }
+
+    const byRel = anchors.find((anchor) => (anchor.getAttribute('rel') || '').toLowerCase().includes('next'));
+    if (byRel) return usableHref(byRel);
+
+    const textMatch = anchors.find((anchor) => {
+      const text = (anchor.innerText || anchor.textContent || anchor.getAttribute('aria-label') || '').trim();
+      return /^(next|siguiente|>)$/i.test(text);
+    });
+    if (textMatch) return usableHref(textMatch);
+
+    return null;
+  }, { provider, nextPageNumber });
+
+  if (nextHref) {
+    await state.page.goto(nextHref, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefined);
+    await state.page.waitForTimeout(1400);
+    return true;
+  }
+
+  if (provider === 'airbnb') {
+    const clickableNextLocators = [
+      state.page.locator('a[aria-label*="Next"], button[aria-label*="Next"], a[aria-label*="next"], button[aria-label*="next"]'),
+      state.page.getByRole('link', { name: /^(Next|Siguiente)$/i }),
+      state.page.getByRole('button', { name: /^(Next|Siguiente)$/i }),
+    ];
+
+    for (const locator of clickableNextLocators) {
+      try {
+        const candidate = locator.first();
+        if (!(await candidate.isVisible({ timeout: 1200 }))) continue;
+        if (await candidate.isDisabled().catch(() => false)) continue;
+        await candidate.click({ timeout: 8000 });
+        await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefined);
+        await state.page.waitForTimeout(1800);
+        return true;
+      } catch {}
+    }
+  }
+
+  return false;
+}
+
 state.page = context.pages().find((p) => p.url() === 'about:blank') ?? await context.newPage();
 await state.page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await waitForPageLoad({ page: state.page, timeout: 15000 }).catch(() => undefined);
 await state.page.waitForTimeout(1600);
-await scrollResults();
 
-const listingUrls = await state.page.evaluate(({ limit, provider }) => {
-  function normalizeUrl(rawUrl) {
-    try {
-      const parsed = new URL(rawUrl, location.href);
-      parsed.hash = '';
-      if (provider === 'airbnb') {
-        const roomId = parsed.pathname.match(/\\/rooms\\/(\\d+)/)?.[1];
-        if (!roomId) return null;
-        return new URL('/rooms/' + roomId, 'https://www.airbnb.com').href;
-      }
-      if (provider === 'zonaprop') {
-        if (!/\\/propiedades\\/clasificado\\//.test(parsed.pathname)) return null;
-        parsed.search = '';
-        return parsed.href;
-      }
-      if (provider === 'argenprop') {
-        if (!/--\\d+$/.test(parsed.pathname)) return null;
-        parsed.search = '';
-        return parsed.href;
-      }
-      return null;
-    } catch {
-      return null;
-    }
+const listingUrls = [];
+const seenListingUrls = new Set();
+const pageUrls = [];
+const seenPageUrls = new Set();
+
+for (let pageIndex = 0; pageIndex < maxPages && listingUrls.length < maxListings; pageIndex += 1) {
+  await scrollResults();
+  const currentPageUrl = state.page.url();
+  if (!seenPageUrls.has(currentPageUrl)) {
+    seenPageUrls.add(currentPageUrl);
+    pageUrls.push(currentPageUrl);
   }
 
-  function isListingHref(href) {
-    if (provider === 'airbnb') return /\\/rooms\\/\\d+/.test(href);
-    if (provider === 'zonaprop') return /\\/propiedades\\/clasificado\\//.test(href);
-    if (provider === 'argenprop') return /--\\d+(?:[/?#]|$)/.test(href);
-    return false;
+  for (const url of await collectListingUrls()) {
+    if (seenListingUrls.has(url)) continue;
+    seenListingUrls.add(url);
+    listingUrls.push(url);
+    if (listingUrls.length >= maxListings) break;
   }
 
-  const urls = new Set();
-  for (const anchor of document.querySelectorAll('a[href]')) {
-    const href = anchor.getAttribute('href') || '';
-    if (!isListingHref(href)) continue;
-    const normalized = normalizeUrl(href);
-    if (normalized) urls.add(normalized);
+  if (listingUrls.length >= maxListings) break;
+  const beforeNextUrl = state.page.url();
+  const clickedNext = await clickNextPage(pageIndex + 2);
+  if (!clickedNext) break;
+  if (state.page.url() === beforeNextUrl && pageIndex > 0) {
+    await state.page.waitForTimeout(1200);
   }
-  return Array.from(urls).slice(0, limit);
-}, { limit: maxListings, provider });
+}
 
 const payload = {
   search_url: searchUrl,
   page_url: state.page.url(),
+  page_urls: pageUrls,
   listing_urls: listingUrls,
 };
 console.log(${JSON.stringify(PLAYWRITER_JSON_START)});
@@ -134,6 +247,7 @@ console.log(${JSON.stringify(PLAYWRITER_JSON_END)});
 export async function findListingUrlsFromSearchUrl(
   searchUrl: string,
   maxListings: number,
+  maxPages = 5,
 ): Promise<ListingSearchResult> {
   const provider = detectSearchProvider(searchUrl);
   const warnings = validateSearchUrl(searchUrl, provider);
@@ -153,13 +267,14 @@ export async function findListingUrlsFromSearchUrl(
       "--timeout",
       "120000",
       "-e",
-      createPlaywriterSearchScript(searchUrl, provider, maxListings),
+      createPlaywriterSearchScript(searchUrl, provider, maxListings, maxPages),
     ],
     130_000,
   );
   const payload = parsePlaywriterJson<{
     search_url: string;
     page_url: string;
+    page_urls?: string[];
     listing_urls: string[];
   }>(stdout);
   const listingUrls = Array.from(new Set(payload.listing_urls)).slice(0, maxListings);
@@ -168,6 +283,7 @@ export async function findListingUrlsFromSearchUrl(
     provider,
     search_url: payload.search_url,
     page_url: payload.page_url,
+    page_urls: payload.page_urls || [payload.page_url],
     listing_urls: listingUrls,
     listing_count: listingUrls.length,
     session_id: sessionId,

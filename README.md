@@ -180,12 +180,13 @@ Use `--json` to print one summary JSON object per line.
 
 ## Search And Scan
 
-Use `bun run search` when you have a provider search/results URL instead of individual listing URLs. The command discovers listing URLs from the result page, classifies each listing, and prints only `IN_UNIT` matches by default:
+Use `bun run search` when you have a provider search/results URL instead of individual listing URLs. The command pages through result pages, discovers listing URLs, classifies each listing, and prints only `IN_UNIT` matches by default:
 
 ```sh
 bun run search \
   --search-url "https://www.zonaprop.com.ar/inmuebles-alquiler-temporal-nunez-las-canitas-con-amoblado-menos-1500-dolar.html" \
   --max-listings 20 \
+  --max-pages 5 \
   --out results/search-zonaprop.jsonl
 ```
 
@@ -197,10 +198,13 @@ Supported search providers:
 
 The provider URL remains the source of truth for filters such as neighborhood, furnished, washer amenity, dates, and max dollar amount. For Airbnb, pass a URL with `checkin` and `checkout` when you want date-specific availability and pricing.
 
+Search audit records include `page_urls`, so you can confirm which result pages were visited.
+
 Useful flags:
 
 ```sh
 --discover-only # only extract listing URLs, no model calls
+--max-pages 5   # page through up to 5 result pages
 --all           # print every classified listing instead of only IN_UNIT matches
 --json          # print JSON lines
 ```

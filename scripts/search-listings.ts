@@ -23,6 +23,7 @@ type SearchArgs = {
   model: string;
   escalationModel: string;
   maxListings: number;
+  maxPages: number;
   maxImages: number;
   concurrency: number;
   cacheDir: string;
@@ -44,6 +45,7 @@ Options:
   --search-url <url>        Provider search/results URL.
   --out <path>              Append full JSONL audit records.
   --max-listings <n>        Maximum listing URLs to inspect. Defaults to 20.
+  --max-pages <n>           Maximum search result pages to visit. Defaults to 5.
   --all                     Print every classified listing, not just IN_UNIT matches.
   --discover-only           Only extract listing URLs; no model calls.
   --model <model>           First-pass model. Defaults to ${DEFAULT_MODEL}.
@@ -65,6 +67,7 @@ function parseArgs(argv: string[]): SearchArgs {
     model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     maxListings: 20,
+    maxPages: 5,
     maxImages: DEFAULT_MAX_IMAGES,
     concurrency: DEFAULT_CONCURRENCY,
     cacheDir: DEFAULT_CACHE_DIR,
@@ -97,6 +100,14 @@ function parseArgs(argv: string[]): SearchArgs {
         const maxListings = Number.parseInt(next, 10);
         if (!Number.isInteger(maxListings) || maxListings < 1) usage();
         args.maxListings = maxListings;
+        i += 1;
+        break;
+      }
+      case "--max-pages": {
+        if (!next) usage();
+        const maxPages = Number.parseInt(next, 10);
+        if (!Number.isInteger(maxPages) || maxPages < 1) usage();
+        args.maxPages = maxPages;
         i += 1;
         break;
       }
@@ -188,7 +199,7 @@ if (!args.discoverOnly && !process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY is required. Add it to .env as OPENAI_API_KEY=...");
 }
 
-const searchResult = await findListingUrlsFromSearchUrl(args.searchUrl, args.maxListings);
+const searchResult = await findListingUrlsFromSearchUrl(args.searchUrl, args.maxListings, args.maxPages);
 const searchRecord = {
   ok: true,
   type: "listing_search",
