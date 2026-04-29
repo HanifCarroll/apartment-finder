@@ -62,7 +62,8 @@ function limitExtractionImages(extraction: ListingExtraction, maxImages: number)
 }
 
 function isUsableCachedExtraction(extraction: ListingExtraction): boolean {
-  return extraction.image_urls.length > 0;
+  return extraction.image_urls.length > 0 &&
+    Boolean(extraction.listing_title?.trim() || extraction.listing_description?.trim() || extraction.listing_price_text?.trim());
 }
 
 export async function extractListingImageUrls(

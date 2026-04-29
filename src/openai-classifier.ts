@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { withGlobalModelCallSlot } from "./lib/concurrency";
+import { logger } from "./lib/logger";
 import type { Args, ImagePayload, Verdict } from "./types";
 import { VerdictSchema } from "./types";
 
@@ -70,11 +71,22 @@ export async function classifyWithModel(
     throw new Error(`Model ${model} returned no parsed verdict.`);
   }
 
+  const rate_limits = readRateLimitHeaders(response);
+  logger.info({
+    event: "model_call_finished",
+    model,
+    imageSource: image.source,
+    latencyMs: latency_ms,
+    totalTokens: data.usage?.total_tokens,
+    remainingRequests: rate_limits["x-ratelimit-remaining-requests"],
+    remainingTokens: rate_limits["x-ratelimit-remaining-tokens"],
+  });
+
   return {
     model,
     verdict,
     usage: data.usage,
-    rate_limits: readRateLimitHeaders(response),
+    rate_limits,
     latency_ms,
   };
 }

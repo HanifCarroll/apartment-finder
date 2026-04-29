@@ -44,6 +44,7 @@ const COMMON_NEIGHBORHOOD_KEYS = [
 ];
 
 type ResultFilter = "ALL" | "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN";
+type ResultSort = "SCAN_ORDER" | "PRICE_ASC" | "PRICE_DESC";
 
 type FormState = {
   mode: "filters" | "url";
@@ -104,6 +105,7 @@ function HomePage() {
   const initialPreferences = Route.useLoaderData();
   const [form, setForm] = React.useState<FormState>(() => readStoredForm(initialPreferences.form));
   const [resultFilter, setResultFilter] = React.useState<ResultFilter>(() => readStoredResultFilter(initialPreferences.resultFilter));
+  const [resultSort, setResultSort] = React.useState<ResultSort>("SCAN_ORDER");
   const [lightbox, setLightbox] = React.useState<{ images: string[]; index: number; title: string } | null>(null);
   const [activeJobId, setActiveJobId] = React.useState<string | null>(null);
 
@@ -250,7 +252,9 @@ function HomePage() {
                   pending={isScanning}
                   loadingStage={loadingStage}
                   filter={resultFilter}
+                  sort={resultSort}
                   onFilterChange={setResultFilter}
+                  onSortChange={setResultSort}
                   onOpenLightbox={(images, index, title) => setLightbox({ images, index, title })}
                 />
               </div>
@@ -403,7 +407,9 @@ function ResultsPanel({
   pending,
   loadingStage,
   filter,
+  sort,
   onFilterChange,
+  onSortChange,
   onOpenLightbox,
 }: {
   result?: SearchUiResult;
@@ -411,7 +417,9 @@ function ResultsPanel({
   pending: boolean;
   loadingStage: { title: string; label: string };
   filter: ResultFilter;
+  sort: ResultSort;
   onFilterChange: (filter: ResultFilter) => void;
+  onSortChange: (sort: ResultSort) => void;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
 }) {
   if (pending && !result) {
@@ -444,7 +452,7 @@ function ResultsPanel({
     );
   }
 
-  const filteredItems = result.items.filter((item) => matchesResultFilter(item, filter));
+  const filteredItems = sortResultItems(result.items.filter((item) => matchesResultFilter(item, filter)), sort);
 
   return (
     <div className="space-y-3">
@@ -457,6 +465,7 @@ function ResultsPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <ResultFilterTabs result={result} value={filter} onChange={onFilterChange} />
+        <ResultSortSelect value={sort} onChange={onSortChange} />
         {result.warnings.map((warning) => (
           <Badge key={warning} variant="outline" className="max-w-full truncate text-muted-foreground">
             {warning}
@@ -486,6 +495,29 @@ function ResultsPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function ResultSortSelect({
+  value,
+  onChange,
+}: {
+  value: ResultSort;
+  onChange: (sort: ResultSort) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      Sort
+      <select
+        className="h-8 rounded-md border bg-card px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        value={value}
+        onChange={(event) => onChange(event.target.value as ResultSort)}
+      >
+        <option value="SCAN_ORDER">Scan order</option>
+        <option value="PRICE_ASC">Lowest price</option>
+        <option value="PRICE_DESC">Highest price</option>
+      </select>
+    </label>
   );
 }
 
@@ -718,6 +750,17 @@ function formatPrice(item: SearchUiResult["items"][number]): string {
   ].filter(Boolean).join(" + ");
 }
 
+function sortResultItems(items: SearchUiResult["items"], sort: ResultSort): SearchUiResult["items"] {
+  if (sort === "SCAN_ORDER") return items;
+  const missingValue = sort === "PRICE_ASC" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+  const direction = sort === "PRICE_ASC" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    const aPrice = a.priceAmountUsd ?? missingValue;
+    const bPrice = b.priceAmountUsd ?? missingValue;
+    return (aPrice - bPrice) * direction;
+  });
+}
+
 function formatDecision(decision: string): string {
   if (decision === "IN_UNIT") return "Washer in unit";
   if (decision === "SHARED_BUILDING") return "Shared laundry";
@@ -782,16 +825,15 @@ function useLoadingStage(active: boolean, job?: SearchScanJob): { title: string;
 
   if (job?.status === "running" && job.totalListings > 0) {
     if (job.completedListings === 0) {
-      const started = Math.max(job.startedListings, 1);
       return {
         title: "Scanning listings",
-        label: `Started ${started}/${job.totalListings}. Results will appear here as each listing finishes.`,
+        label: `Checking ${job.totalListings} listings. Results will appear as each one finishes.`,
       };
     }
 
     return {
       title: "Scanning listings",
-      label: `${job.completedListings}/${job.totalListings} complete. Checking the remaining listings now.`,
+      label: `${job.completedListings} of ${job.totalListings} listings checked. More results will appear as they finish.`,
     };
   }
 

@@ -45,6 +45,7 @@ export type SearchUiItem = {
   title?: string;
   description?: string;
   price?: string;
+  priceAmountUsd?: number;
   neighborhood?: string;
   totalAreaM2?: number;
   coveredAreaM2?: number;
@@ -210,6 +211,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
   try {
     const { scanSearchUrl, searchUrl, warnings, ignored, scanOptions } = await prepareSearchScan(data);
     const partialItems: SearchUiItem[] = [];
+    const completedItems: SearchUiItem[] = [];
     const result = await scanSearchUrl(
       searchUrl,
       scanOptions,
@@ -224,6 +226,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
         const job = searchJobs.get(jobId);
         if (!job) return;
         partialItems[index] = toUiItem(item);
+        completedItems.push(partialItems[index]);
         job.completedListings = partialItems.filter(Boolean).length;
         job.stage = job.completedListings === job.totalListings ? "Finalizing results" : "Scanning listings";
         job.result = {
@@ -236,7 +239,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
           ignored,
           matchCount: partialItems.filter((partial) => partial?.decision === "IN_UNIT").length,
           failedCount: partialItems.filter((partial) => partial?.failed).length,
-          items: partialItems.filter(Boolean),
+          items: completedItems,
         };
       },
     );
@@ -313,6 +316,7 @@ function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl
     title: extraction?.listing_title,
     description: extraction?.listing_description,
     price: details.listing_price_text,
+    priceAmountUsd: parseUsdAmount(details.listing_price_text),
     expenses: details.listing_expenses_text,
     neighborhood: details.listing_neighborhood,
     totalAreaM2: details.listing_total_area_m2,
@@ -341,4 +345,15 @@ function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl
     })),
     error: summary?.error,
   };
+}
+
+function parseUsdAmount(priceText: string | undefined): number | undefined {
+  if (!priceText || !/\b(?:USD|US\$|U\$S)\b/i.test(priceText)) return undefined;
+  const numberText = priceText.match(/[\d.,]+/)?.[0];
+  if (!numberText) return undefined;
+  const normalized = numberText.includes(",") && numberText.includes(".")
+    ? numberText.replace(/\./g, "").replace(",", ".")
+    : numberText.replace(/,/g, "");
+  const value = Number.parseFloat(normalized);
+  return Number.isFinite(value) ? value : undefined;
 }

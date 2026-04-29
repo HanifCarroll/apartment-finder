@@ -145,6 +145,12 @@ function parseMoneyText(html: string, labelPattern?: RegExp): string | undefined
   return match[0].replace(/^US\$|^U\$S/i, "USD").replace(/^USD\s*/i, "USD ");
 }
 
+function parseTitlebarPrice(html: string): string | undefined {
+  const titlebar = html.match(/class=["'][^"']*titlebar__price[^"']*["'][^>]*>([\s\S]{0,160})<\/p>/i)?.[1];
+  const text = titlebar ? cleanText(titlebar) : "";
+  return text ? parseMoneyText(text) : parseMoneyText(html);
+}
+
 export async function extractArgenpropListingImageUrls(
   listingUrl: string,
   maxImages: number,
@@ -167,7 +173,7 @@ export async function extractArgenpropListingImageUrls(
     provider: "argenprop",
     listing_title: parseMetaContent(listingHtml, "og:title"),
     listing_description: parseMetaContent(listingHtml, "og:description") || parseMetaContent(listingHtml, "description"),
-    listing_price_text: parseMoneyText(listingHtml),
+    listing_price_text: parseTitlebarPrice(listingHtml),
     listing_expenses_text: parseMoneyText(listingHtml, /\b(?:expensas?|gastos)[\s\S]{0,80}/i),
     ...parsePropertyFeatures(listingHtml),
     listing_url: listingUrl,
