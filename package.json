@@ -17,6 +17,7 @@
     "smoke:search": "bun run scripts/smoke-search-discovery.ts",
     "smoke:browser": "bun run scripts/smoke-playwright.ts",
     "smoke:browser:sites": "bun run scripts/smoke-browser-sites.ts",
+    "smoke:browserbase:sites": "node scripts/smoke-browserbase-sites.mjs",
     "listings:zonaprop": "bun run scripts/find-zonaprop-listings.ts",
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",
     "fixtures:listing-evidence": "bun run scripts/build-listing-evidence-candidates.ts",

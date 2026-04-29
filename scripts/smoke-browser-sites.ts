@@ -12,6 +12,10 @@ const program = new Command()
   .parse(process.argv);
 
 const options = program.opts<{ backend: BrowserBackend; provider?: SearchProvider }>();
+if (options.backend === "browserbase") {
+  throw new Error("Run Browserbase site checks with `bun run smoke:browserbase:sites` so Playwright CDP connects under Node.");
+}
+
 const cases = options.provider
   ? SITE_SMOKE_CASES.filter((item) => item.provider === options.provider)
   : SITE_SMOKE_CASES;

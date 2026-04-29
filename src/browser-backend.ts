@@ -7,6 +7,7 @@ export type BrowserSession = {
   backend: BrowserBackend;
   sessionId?: string;
   context: BrowserContext;
+  browser?: Browser;
   close: () => Promise<void>;
 };
 
@@ -14,6 +15,16 @@ export function browserBackendFromEnv(): BrowserBackend {
   const backend = process.env.BROWSER_BACKEND || "local";
   if (backend === "local" || backend === "browserbase") return backend;
   throw new Error(`Unsupported BROWSER_BACKEND: ${backend}`);
+}
+
+function envFlag(name: string): boolean {
+  return ["1", "true", "yes"].includes((process.env[name] || "").toLowerCase());
+}
+
+function browserbaseOs(): "windows" | "mac" | "linux" | "mobile" | "tablet" {
+  const os = process.env.BROWSERBASE_OS || "linux";
+  if (os === "windows" || os === "mac" || os === "linux" || os === "mobile" || os === "tablet") return os;
+  throw new Error(`Unsupported BROWSERBASE_OS: ${os}`);
 }
 
 export async function createBrowserSession(backend = browserBackendFromEnv()): Promise<BrowserSession> {
@@ -51,15 +62,26 @@ async function createBrowserbaseSession(): Promise<BrowserSession> {
   const bb = new Browserbase({ apiKey });
   const session = await bb.sessions.create({
     projectId,
+    browserSettings: {
+      solveCaptchas: true,
+      os: browserbaseOs(),
+      viewport: {
+        width: 1365,
+        height: 900,
+      },
+    },
+    proxies: envFlag("BROWSERBASE_PROXY"),
+    timeout: 300,
   });
 
-  const browser: Browser = await chromium.connectOverCDP(session.connectUrl);
+  const browser: Browser = await chromium.connectOverCDP(session.connectUrl, { timeout: 120_000 });
   const context = browser.contexts()[0] ?? await browser.newContext();
 
   return {
     backend: "browserbase",
     sessionId: session.id,
     context,
+    browser,
     close: async () => browser.close(),
   };
 }

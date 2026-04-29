@@ -31,6 +31,8 @@ Optional Browserbase credentials are only needed for Browserbase smoke tests:
 BROWSERBASE_API_KEY=...
 BROWSERBASE_PROJECT_ID=...
 BROWSER_BACKEND=local # local or browserbase
+BROWSERBASE_OS=linux # basic Browserbase stealth supports Linux
+BROWSERBASE_PROXY=false # paid Browserbase plans only
 ```
 
 ## Classify One Image
@@ -265,11 +267,11 @@ bun run typecheck
 bun run test
 bun run smoke:browser
 bun run smoke:browser:sites --backend local
-bun run smoke:browser:sites --backend browserbase
+bun run smoke:browserbase:sites
 ```
 
 `bun run playwright:install` installs the Chromium browser used by Playwright smoke checks and future direct browser automation.
-After filling `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`, run `bun run smoke:browser:sites --backend browserbase` to check whether Browserbase can load Zonaprop, Argenprop, and Airbnb.
+After filling `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`, run `bun run smoke:browserbase:sites` to check whether Browserbase can load Zonaprop, Argenprop, and Airbnb.
 
 Generated outputs, downloaded images, and secrets are ignored:
 
