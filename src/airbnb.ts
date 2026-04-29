@@ -1,5 +1,5 @@
 import type { ListingExtraction } from "./types";
-import { classifyLaundryMetadataSignal } from "./laundry-metadata";
+import { classifyAirbnbLaundryAmenitySignal } from "./laundry-metadata";
 
 function decodeHtmlEntities(text: string): string {
   return text
@@ -121,7 +121,7 @@ export async function extractAirbnbListingImageUrls(
   const imageUrls = uniqueAirbnbImageUrls(extractImageUrls(html), roomId, maxImages);
   const laundryAmenity = parseAirbnbLaundryAmenity(html);
   const airbnbSignal = laundryAmenity.airbnb_laundry_amenity_text
-    ? classifyLaundryMetadataSignal("airbnb_amenity", laundryAmenity.airbnb_laundry_amenity_text)
+    ? classifyAirbnbLaundryAmenitySignal(laundryAmenity.airbnb_laundry_amenity_text)
     : null;
 
   return {

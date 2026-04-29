@@ -182,7 +182,6 @@ function buildReport(summary: ListingSummaryRecord, extraction?: ListingExtracti
       source: extraction?.extraction_source,
     },
     metadata: {
-      title: extraction?.metadata_title,
       airbnb_laundry_amenity_label: summary.airbnb_laundry_amenity_label || extraction?.airbnb_laundry_amenity_label,
       airbnb_laundry_amenity_text: summary.airbnb_laundry_amenity_text || extraction?.airbnb_laundry_amenity_text,
       laundry_signals: extraction?.metadata_laundry_signals || summary.metadata_laundry_signals || [],

@@ -47,8 +47,6 @@ Supported providers:
 - Argenprop: gallery endpoint extraction.
 - Airbnb: room page payload extraction, including washer amenity metadata when the page says `Washer`, `Washer - in unit`, or `Washer - in building`.
 
-Zonaprop and Argenprop also extract listing title, description, amenities, and laundry-related metadata snippets when available. These text signals are reported as evidence, but they do not currently override vision decisions because terms like `lavadero`, `laundry`, and `amenities` are less canonical than Airbnb's explicit washer-location labels.
-
 For normal use, prefer the two-pass listing summary:
 
 ```sh
@@ -118,7 +116,7 @@ The report includes:
 
 - final decision, confidence, and decision source
 - provider and gallery extraction status
-- page metadata signals such as `lavadero ... lavarropas` or amenities-list `LAUNDRY`
+- Airbnb washer amenity metadata when available
 - strongest photo evidence, URLs, and model rationales
 
 Use `--json` for a machine-readable report object.

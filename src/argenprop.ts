@@ -1,10 +1,5 @@
 import type { ListingExtraction } from "./types";
-import {
-  cleanMetadataText,
-  collectLaundryMetadataSignals,
-  decodeBasicHtmlEntities,
-  extractTagText,
-} from "./laundry-metadata";
+import { decodeBasicHtmlEntities } from "./laundry-metadata";
 
 const ARG_PROP_ORIGIN = "https://www.argenprop.com";
 
@@ -84,30 +79,6 @@ function extractImageUrls(html: string): string[] {
   return Array.from(urls);
 }
 
-function parseListingMetadata(html: string): Pick<
-  ListingExtraction,
-  "metadata_title" | "metadata_description" | "metadata_amenities" | "metadata_laundry_signals"
-> {
-  const title = extractTagText(html, /<h1[^>]*>\s*([\s\S]*?)\s*<\/h1>/i)
-    || extractTagText(html, /<title[^>]*>\s*([\s\S]*?)\s*<\/title>/i);
-  const description = extractTagText(
-    html,
-    /<div[^>]+class="[^"]*section-description--content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-  );
-  const amenities = Array.from(
-    html.matchAll(/<li[^>]*class="[^"]*property-features-item[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/li>/gi),
-  )
-    .map((match) => cleanMetadataText(match[1] || ""))
-    .filter(Boolean);
-
-  return {
-    metadata_title: title,
-    metadata_description: description,
-    metadata_amenities: amenities,
-    metadata_laundry_signals: collectLaundryMetadataSignals({ title, description, amenities }),
-  };
-}
-
 export async function extractArgenpropListingImageUrls(
   listingUrl: string,
   maxImages: number,
@@ -116,7 +87,6 @@ export async function extractArgenpropListingImageUrls(
   const avisoId = parseAvisoId(listingUrl, listingHtml);
   const galleryUrl = parseGalleryUrl(listingHtml, avisoId);
   const galleryHtml = await fetchText(galleryUrl);
-  const metadata = parseListingMetadata(listingHtml);
   const galleryCount = parsePhotoCount(listingHtml) ?? parsePhotoCount(galleryHtml);
   const galleryImageUrls = uniqueArgenpropImageUrls(extractImageUrls(galleryHtml), maxImages);
   const imageUrls =
@@ -129,7 +99,6 @@ export async function extractArgenpropListingImageUrls(
 
   return {
     provider: "argenprop",
-    ...metadata,
     listing_url: listingUrl,
     page_url: listingUrl,
     image_urls: imageUrls,
