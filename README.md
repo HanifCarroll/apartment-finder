@@ -220,6 +220,26 @@ bun run find "https://www.zonaprop.com.ar/inmuebles-alquiler-temporal-nunez-las-
 
 `bun run search --search-url <url>` remains available as a compatibility alias for scripts.
 
+You can also let the CLI build the provider search URL from normalized filters:
+
+```sh
+bun run find \
+  --provider zonaprop \
+  --neighborhood nunez,las-canitas \
+  --max-price 1500 \
+  --ambientes 2
+```
+
+Supported generated-filter fields:
+
+- `--provider zonaprop|argenprop|airbnb`
+- `--neighborhood <name>` or `--neighborhoods <comma-list>`
+- `--max-price <usd>` or `--price <usd>`
+- `--ambientes <n>` and `--dormitorios <n>` for Zonaprop/Argenprop
+- `--check-in YYYY-MM-DD` and `--check-out YYYY-MM-DD` for Airbnb
+
+Generated Zonaprop and Argenprop searches always include `amoblado`. Airbnb generated searches include `amenities[]=33` for washer, `room_types[]=Entire home/apt`, and ignore `ambientes`/`dormitorios` because Airbnb does not expose those filters in the same way.
+
 Supported search providers:
 
 - Zonaprop search pages
@@ -228,7 +248,7 @@ Supported search providers:
 
 Search discovery uses local Playwright for Argenprop and Airbnb. Zonaprop stays on Playwriter because local Playwright and Browserbase currently hit the site's bot check.
 
-The provider URL remains the source of truth for filters such as neighborhood, furnished, washer amenity, dates, and max dollar amount. For Airbnb, pass a URL with `checkin` and `checkout` when you want date-specific availability and pricing.
+When you pass a raw URL, that provider URL remains the source of truth for filters such as neighborhood, furnished, washer amenity, dates, and max dollar amount. For Airbnb, pass a URL or generated filters with `checkin` and `checkout` when you want date-specific availability and pricing.
 
 Search audit records include `page_urls`, so you can confirm which result pages were visited.
 

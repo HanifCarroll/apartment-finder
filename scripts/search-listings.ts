@@ -22,9 +22,17 @@ import {
 import { findListingUrlsFromSearchUrl } from "../src/listing/search";
 import type { ListingSearchResult } from "../src/listing/search";
 import type { LocationLabel } from "../src/types";
+import {
+  buildSearchUrl,
+  parseNeighborhoodList,
+  supportedNeighborhoods,
+} from "../src/providers/search-url-builder";
+import type { SearchProvider } from "../src/providers/search";
 
 type SearchArgs = CommonScanCliOptions & {
   searchUrl: string;
+  builtSearchWarnings: string[];
+  builtSearchIgnored: string[];
   maxListings: number;
   maxPages: number;
   includeAll: boolean;
@@ -44,6 +52,16 @@ function parseArgs(argv: string[]): SearchArgs {
     .description("Find apartments with likely in-unit washers from a provider search/results URL.")
     .argument("[url]", "Provider search/results URL.")
     .option("--search-url <url>", "Provider search/results URL. Kept for script compatibility.")
+    .option("--provider <provider>", "Build a search URL for: zonaprop, argenprop, or airbnb.")
+    .option("--neighborhood <name>", `Neighborhood to search. Repeat or comma-separate. Supported: ${supportedNeighborhoods().join(", ")}.`, collectOption, [])
+    .option("--neighborhoods <names>", "Comma-separated alias for --neighborhood.")
+    .option("--max-price <usd>", "Maximum monthly price in USD.")
+    .option("--price <usd>", "Alias for --max-price.")
+    .option("--ambientes <n>", "Number of ambientes for Zonaprop/Argenprop.")
+    .option("--dormitorios <n>", "Number of dormitorios for Zonaprop/Argenprop.")
+    .option("--check-in <date>", "Airbnb check-in date, YYYY-MM-DD.")
+    .option("--check-out <date>", "Airbnb check-out date, YYYY-MM-DD.")
+    .option("--adults <n>", "Airbnb adults/guests count.", "1")
     .option("--out <path>", "Append full JSONL audit records.")
     .option("--max-listings <n>", "Maximum listing URLs to inspect.", "20")
     .option("--max-pages <n>", "Maximum search result pages to visit.", "5")
@@ -63,6 +81,16 @@ function parseArgs(argv: string[]): SearchArgs {
 
   const options = program.opts<{
     searchUrl?: string;
+    provider?: SearchProvider;
+    neighborhood?: string[];
+    neighborhoods?: string;
+    maxPrice?: string;
+    price?: string;
+    ambientes?: string;
+    dormitorios?: string;
+    checkIn?: string;
+    checkOut?: string;
+    adults: string;
     out?: string;
     maxListings: string;
     maxPages: string;
@@ -91,10 +119,17 @@ function parseArgs(argv: string[]): SearchArgs {
   const maxPages = Number.parseInt(options.maxPages, 10);
   if (!Number.isInteger(maxPages) || maxPages < 1) throw new Error("--max-pages must be a positive integer.");
 
+  const explicitSearchUrl = options.searchUrl || positionalUrl || "";
+  const builtSearch = explicitSearchUrl
+    ? undefined
+    : buildUrlFromFilterOptions(options);
+
   const defaults = defaultCommonScanOptions();
   const args: SearchArgs = {
     ...defaultCommonScanOptions(),
-    searchUrl: options.searchUrl || positionalUrl || "",
+    searchUrl: explicitSearchUrl || builtSearch?.url || "",
+    builtSearchWarnings: builtSearch?.warnings || [],
+    builtSearchIgnored: builtSearch?.ignored || [],
     outPath: options.out,
     model: options.model || defaults.model,
     escalationModel: options.escalationModel || defaults.escalationModel,
@@ -113,6 +148,9 @@ function parseArgs(argv: string[]): SearchArgs {
   };
 
   if (!args.searchUrl) program.help({ error: true });
+  if (explicitSearchUrl && hasFilterOptions(options)) {
+    throw new Error("Pass either a search URL or filter options, not both.");
+  }
   return args;
 }
 
@@ -120,6 +158,71 @@ function parsePositiveInt(value: string, name: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer.`);
   return parsed;
+}
+
+function buildUrlFromFilterOptions(options: {
+  provider?: SearchProvider;
+  neighborhood?: string[];
+  neighborhoods?: string;
+  maxPrice?: string;
+  price?: string;
+  ambientes?: string;
+  dormitorios?: string;
+  checkIn?: string;
+  checkOut?: string;
+  adults?: string;
+}) {
+  if (!hasFilterOptions(options)) return undefined;
+  if (!options.provider || !["zonaprop", "argenprop", "airbnb"].includes(options.provider)) {
+    throw new Error("--provider must be one of: zonaprop, argenprop, airbnb.");
+  }
+  const neighborhoods = parseNeighborhoodList([
+    ...(options.neighborhood || []),
+    options.neighborhoods || "",
+  ]);
+  return buildSearchUrl({
+    provider: options.provider,
+    neighborhoods,
+    maxPriceUsd: parseOptionalPositiveInt(options.maxPrice || options.price, "--max-price"),
+    ambientes: parseOptionalPositiveInt(options.ambientes, "--ambientes"),
+    dormitorios: parseOptionalPositiveInt(options.dormitorios, "--dormitorios"),
+    checkIn: options.checkIn,
+    checkOut: options.checkOut,
+    adults: parseOptionalPositiveInt(options.adults, "--adults"),
+  });
+}
+
+function hasFilterOptions(options: {
+  provider?: string;
+  neighborhood?: string[];
+  neighborhoods?: string;
+  maxPrice?: string;
+  price?: string;
+  ambientes?: string;
+  dormitorios?: string;
+  checkIn?: string;
+  checkOut?: string;
+}): boolean {
+  return Boolean(
+    options.provider
+      || options.neighborhood?.length
+      || options.neighborhoods
+      || options.maxPrice
+      || options.price
+      || options.ambientes
+      || options.dormitorios
+      || options.checkIn
+      || options.checkOut,
+  );
+}
+
+function parseOptionalPositiveInt(value: string | undefined, name: string): number | undefined {
+  if (!value) return undefined;
+  return parsePositiveInt(value, name);
+}
+
+function collectOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 function shouldPrint(decision: LocationLabel | undefined, args: SearchArgs): boolean {
@@ -145,6 +248,7 @@ function printDiscovery(searchRecord: SearchRecord, args: SearchArgs): void {
   }
 
   console.log(`Discovered ${searchRecord.listing_count} listings from ${searchRecord.provider}`);
+  console.log(`Search URL: ${searchRecord.search_url}`);
   console.log(`Visited ${searchRecord.page_urls.length} result page(s)`);
   for (const url of searchRecord.listing_urls) console.log(`- ${url}`);
 }
@@ -185,6 +289,12 @@ if (args.outPath) await appendJsonl(args.outPath, [searchRecord]);
 
 for (const warning of searchResult.warnings) {
   console.error(`warning: ${warning}`);
+}
+for (const warning of args.builtSearchWarnings) {
+  console.error(`warning: ${warning}`);
+}
+for (const ignored of args.builtSearchIgnored) {
+  console.error(`warning: ${ignored} is ignored for ${searchResult.provider} generated search URLs.`);
 }
 
 if (args.discoverOnly) {
