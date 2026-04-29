@@ -38,6 +38,7 @@ export type Args = {
   listingSummary: boolean;
   escalationModel: string;
   classifyAll: boolean;
+  stagedClassification: boolean;
   extractOnly: boolean;
   jsonOutput: boolean;
 };

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn, useServerFn } from "@tanstack/react-start";
 import {
@@ -24,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { runSearch, type SearchUiResult } from "@/web/search.functions";
+import { getSearchScanJob, startSearchScan, type SearchScanJob, type SearchUiResult } from "@/web/search.functions";
 import { supportedNeighborhoodOptions, type SupportedNeighborhood } from "@/core/search-url-builder";
 
 export const Route = createFileRoute("/")({
@@ -99,19 +99,37 @@ const getInitialPreferences = createServerFn({ method: "GET" }).handler(async ()
 });
 
 function HomePage() {
-  const runSearchFn = useServerFn(runSearch);
+  const startSearchScanFn = useServerFn(startSearchScan);
+  const getSearchScanJobFn = useServerFn(getSearchScanJob);
   const initialPreferences = Route.useLoaderData();
   const [form, setForm] = React.useState<FormState>(() => readStoredForm(initialPreferences.form));
   const [resultFilter, setResultFilter] = React.useState<ResultFilter>(() => readStoredResultFilter(initialPreferences.resultFilter));
   const [lightbox, setLightbox] = React.useState<{ images: string[]; index: number; title: string } | null>(null);
+  const [activeJobId, setActiveJobId] = React.useState<string | null>(null);
 
   const searchMutation = useMutation({
     mutationKey: ["search-scan", form.mode, form.provider],
-    mutationFn: async (payload: FormState) => runSearchFn({ data: toSearchPayload(payload) }),
+    mutationFn: async (payload: FormState) => startSearchScanFn({ data: toSearchPayload(payload) }),
+    onSuccess: ({ jobId }) => setActiveJobId(jobId),
   });
 
-  const result = searchMutation.data;
-  const loadingStage = useLoadingStage(searchMutation.isPending);
+  const jobQuery = useQuery({
+    queryKey: ["search-scan-job", activeJobId],
+    queryFn: async () => getSearchScanJobFn({ data: { jobId: activeJobId || "" } }),
+    enabled: Boolean(activeJobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "completed" || status === "failed" ? false : 1000;
+    },
+  });
+
+  const job = jobQuery.data;
+  const result = job?.result;
+  const isScanning = searchMutation.isPending || job?.status === "running";
+  const scanError = (job?.status === "failed" && job.error)
+    ? new Error(job.error)
+    : searchMutation.error || jobQuery.error;
+  const loadingStage = useLoadingStage(isScanning, job);
 
   React.useEffect(() => {
     window.localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(form));
@@ -145,6 +163,7 @@ function HomePage() {
                 className="flex min-h-full flex-col"
                 onSubmit={(event) => {
                   event.preventDefault();
+                  setActiveJobId(null);
                   searchMutation.mutate(form);
                 }}
               >
@@ -195,8 +214,8 @@ function HomePage() {
                 </div>
 
                 <div className="sticky bottom-0 mt-auto border-t bg-card pt-3">
-                  <Button className="w-full" type="submit" disabled={searchMutation.isPending}>
-                    {searchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  <Button className="w-full" type="submit" disabled={isScanning}>
+                    {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                     Scan listings
                   </Button>
                 </div>
@@ -227,8 +246,8 @@ function HomePage() {
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 <ResultsPanel
                   result={result}
-                  error={searchMutation.error}
-                  pending={searchMutation.isPending}
+                  error={scanError}
+                  pending={isScanning}
                   loadingStage={loadingStage}
                   filter={resultFilter}
                   onFilterChange={setResultFilter}
@@ -395,7 +414,7 @@ function ResultsPanel({
   onFilterChange: (filter: ResultFilter) => void;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
 }) {
-  if (pending) {
+  if (pending && !result) {
     return (
       <StateCard
         icon={<Loader2 className="h-5 w-5 animate-spin" />}
@@ -429,6 +448,13 @@ function ResultsPanel({
 
   return (
     <div className="space-y-3">
+      {pending ? (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Stage {loadingStage.index + 1}/{loadingStage.total}: {loadingStage.label}</span>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <ResultFilterTabs result={result} value={filter} onChange={onFilterChange} />
         {result.warnings.map((warning) => (
@@ -726,7 +752,7 @@ function countResultFilters(items: SearchUiResult["items"]): Record<ResultFilter
   return counts;
 }
 
-function useLoadingStage(active: boolean): { index: number; total: number; label: string } {
+function useLoadingStage(active: boolean, job?: SearchScanJob): { index: number; total: number; label: string } {
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
 
   React.useEffect(() => {
@@ -751,10 +777,18 @@ function useLoadingStage(active: boolean): { index: number; total: number; label
           ? 3
           : 4;
 
+  if (job?.status === "running" && job.totalListings > 0) {
+    return {
+      index: 3,
+      total: LOADING_STAGES.length,
+      label: `${job.stage} (${job.completedListings}/${job.totalListings})`,
+    };
+  }
+
   return {
     index,
     total: LOADING_STAGES.length,
-    label: LOADING_STAGES[index],
+    label: job?.stage || LOADING_STAGES[index],
   };
 }
 

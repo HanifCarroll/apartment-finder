@@ -12,6 +12,8 @@ import { extractListingImageUrls } from "./listing/extraction";
 import { classifyWithModel } from "./openai-classifier";
 import type { Args, ImagePayload, Verdict } from "./types";
 
+const STAGED_INITIAL_IMAGE_COUNT = 12;
+
 function shouldStopAfterImage(records: unknown[]): boolean {
   return records.some((record) => {
     if (!record || typeof record !== "object") return false;
@@ -125,6 +127,36 @@ function airbnbAmenityDecision(extraction: {
   return null;
 }
 
+function listingSummaryRecord(args: Args, extraction: Awaited<ReturnType<typeof extractListingImageUrls>>, values: {
+  decision: string;
+  confidence: string;
+  decisionSource: string;
+  visionDecision?: string;
+  visionConfidence?: string;
+  escalatedImageIndexes?: number[];
+  evidence?: ClassificationRecordLike[];
+}) {
+  return {
+    ok: true,
+    type: "listing_summary",
+    created_at: new Date().toISOString(),
+    listing_url: args.listingUrl,
+    decision: values.decision,
+    confidence: values.confidence,
+    decision_source: values.decisionSource,
+    vision_decision: values.visionDecision,
+    vision_confidence: values.visionConfidence,
+    airbnb_laundry_amenity_label: extraction.airbnb_laundry_amenity_label,
+    airbnb_laundry_amenity_text: extraction.airbnb_laundry_amenity_text,
+    policy: DEFAULT_LISTING_POLICY,
+    first_pass_model: args.models[0],
+    escalation_model: args.escalationModel,
+    escalated_image_indexes: values.escalatedImageIndexes || [],
+    image_count: extraction.image_urls.length,
+    evidence: (values.evidence || []).slice(0, 8),
+  };
+}
+
 async function classifyListing(args: Args): Promise<unknown[]> {
   if (!args.listingUrl) throw new Error("Missing listing URL.");
 
@@ -140,6 +172,18 @@ async function classifyListing(args: Args): Promise<unknown[]> {
   ];
 
   if (args.extractOnly) {
+    return records;
+  }
+
+  const amenityDecision = airbnbAmenityDecision(extraction);
+  if (args.listingSummary && amenityDecision) {
+    records.push(listingSummaryRecord(args, extraction, {
+      decision: amenityDecision,
+      confidence: "high",
+      decisionSource: "airbnb_amenity",
+      escalatedImageIndexes: [],
+      evidence: [],
+    }));
     return records;
   }
 
@@ -168,17 +212,16 @@ async function classifyListing(args: Args): Promise<unknown[]> {
   };
 
   if (args.classifyAll) {
-    const imageRecords = await mapConcurrent(
-      extraction.image_urls,
-      args.concurrency,
-      classifyImageUrl,
-    );
-    records.push(...imageRecords.flat());
-
-    if (args.listingSummary) {
-      const firstPassRecords = records.filter((record): record is ClassificationRecordLike =>
-        Boolean(record && typeof record === "object" && "verdict" in record),
+    const classifyIndexes = async (indexes: number[]): Promise<unknown[]> => {
+      const imageRecords = await mapConcurrent(
+        indexes,
+        args.concurrency,
+        async (imageIndex) => classifyImageUrl(extraction.image_urls[imageIndex], imageIndex),
       );
+      return imageRecords.flat();
+    };
+
+    const buildSummary = async (firstPassRecords: ClassificationRecordLike[], classifiedIndexes: number[]) => {
       const firstPassAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, firstPassRecords);
       const firstPassRecordsByIndex = new Map<number, ClassificationRecordLike>();
       for (const record of firstPassRecords) {
@@ -187,14 +230,10 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         }
       }
 
-      const escalationIndexes = extraction.image_urls
-        .map((_, index) => index)
-        .filter((index) => {
-          const record = firstPassRecordsByIndex.get(index);
-          return record
-            ? isEscalationCandidate(record, firstPassAggregate.predictedLocation)
-            : firstPassAggregate.predictedLocation === "UNKNOWN";
-        });
+      const escalationIndexes = classifiedIndexes.filter((index) => {
+        const record = firstPassRecordsByIndex.get(index);
+        return record ? isEscalationCandidate(record, firstPassAggregate.predictedLocation) : false;
+      });
 
       const escalationRecords = await mapConcurrent(
         escalationIndexes,
@@ -224,32 +263,67 @@ async function classifyListing(args: Args): Promise<unknown[]> {
           }
         },
       );
-      records.push(...escalationRecords);
 
       const finalRecords = [...firstPassRecords, ...escalationRecords.filter((record): record is ClassificationRecordLike =>
         Boolean(record && typeof record === "object" && "verdict" in record),
       )];
       const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
-      const amenityDecision = airbnbAmenityDecision(extraction);
-      records.push({
-        ok: true,
-        type: "listing_summary",
-        created_at: new Date().toISOString(),
-        listing_url: args.listingUrl,
-        decision: amenityDecision || finalAggregate.predictedLocation,
-        confidence: amenityDecision ? "high" : listingConfidence(finalAggregate),
-        decision_source: amenityDecision ? "airbnb_amenity" : "vision",
-        vision_decision: finalAggregate.predictedLocation,
-        vision_confidence: listingConfidence(finalAggregate),
-        airbnb_laundry_amenity_label: extraction.airbnb_laundry_amenity_label,
-        airbnb_laundry_amenity_text: extraction.airbnb_laundry_amenity_text,
-        policy: DEFAULT_LISTING_POLICY,
-        first_pass_model: args.models[0],
-        escalation_model: args.escalationModel,
-        escalated_image_indexes: escalationIndexes,
-        image_count: extraction.image_urls.length,
-        evidence: finalAggregate.evidence.slice(0, 8),
-      });
+      const finalConfidence = listingConfidence(finalAggregate);
+
+      return {
+        escalationRecords,
+        summary: listingSummaryRecord(args, extraction, {
+          decision: finalAggregate.predictedLocation,
+          confidence: finalConfidence,
+          decisionSource: "vision",
+          visionDecision: finalAggregate.predictedLocation,
+          visionConfidence: finalConfidence,
+          escalatedImageIndexes: escalationIndexes,
+          evidence: finalAggregate.evidence,
+        }),
+      };
+    };
+
+    const allIndexes = extraction.image_urls.map((_, index) => index);
+    const initialIndexes = args.stagedClassification
+      ? allIndexes.slice(0, STAGED_INITIAL_IMAGE_COUNT)
+      : allIndexes;
+
+    const initialRecords = await classifyIndexes(initialIndexes);
+    records.push(...initialRecords);
+
+    if (args.listingSummary && args.stagedClassification && initialIndexes.length < allIndexes.length) {
+      const firstPassRecords = initialRecords.filter((record): record is ClassificationRecordLike =>
+        Boolean(record && typeof record === "object" && "verdict" in record),
+      );
+      const firstSummary = await buildSummary(firstPassRecords, initialIndexes);
+      const firstDecision = firstSummary.summary.decision;
+      const firstConfidence = firstSummary.summary.confidence;
+
+      if ((firstDecision === "IN_UNIT" || firstDecision === "SHARED_BUILDING") && firstConfidence !== "low") {
+        records.push(...firstSummary.escalationRecords);
+        records.push(firstSummary.summary);
+        return records;
+      }
+
+      const remainingIndexes = allIndexes.slice(initialIndexes.length);
+      const remainingRecords = await classifyIndexes(remainingIndexes);
+      records.push(...remainingRecords);
+    }
+
+    if (args.stagedClassification && !args.listingSummary) {
+      return records;
+    }
+
+    if (args.listingSummary) {
+      const firstPassRecords = records.filter((record): record is ClassificationRecordLike =>
+        Boolean(record && typeof record === "object" && "verdict" in record && (record as { pass?: string }).pass !== "escalation"),
+      );
+      const summary = await buildSummary(firstPassRecords, allIndexes.filter((index) =>
+        firstPassRecords.some((record) => record.listing_image_index === index),
+      ));
+      records.push(...summary.escalationRecords);
+      records.push(summary.summary);
     }
     return records;
   }

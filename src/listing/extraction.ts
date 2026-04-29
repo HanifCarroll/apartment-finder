@@ -61,8 +61,8 @@ function limitExtractionImages(extraction: ListingExtraction, maxImages: number)
   };
 }
 
-function hasListingText(extraction: ListingExtraction): boolean {
-  return Boolean(extraction.listing_title?.trim() || extraction.listing_description?.trim());
+function isUsableCachedExtraction(extraction: ListingExtraction): boolean {
+  return extraction.image_urls.length > 0;
 }
 
 export async function extractListingImageUrls(
@@ -76,7 +76,7 @@ export async function extractListingImageUrls(
     ? await readCachedListingExtraction(args.extractionCachePath, listingUrl)
     : null;
 
-  if (cached && !args.refreshExtraction && hasListingText(cached)) {
+  if (cached && !args.refreshExtraction && isUsableCachedExtraction(cached)) {
     return withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
       extraction_source: "cache",
       extraction_attempts: 0,

@@ -30,6 +30,7 @@ Options:
   --listing-summary   Return a listing-level decision using mini first, then ${DEFAULT_ESCALATION_MODEL} for uncertain photos.
   --escalation-model <model> Model for second-pass listing summary checks. Defaults to ${DEFAULT_ESCALATION_MODEL}.
   --classify-all      Classify every extracted listing photo. Default stops once a washer is found.
+  --staged-classification Classify the first batch of listing photos, then expand only if uncertain.
   --extract-only      Only extract listing photo URLs. Does not require OPENAI_API_KEY.
   --json              Print raw JSON instead of concise listing summary text.
 `);
@@ -49,6 +50,7 @@ export function parseArgs(argv: string[]): Args {
     listingSummary: false,
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     classifyAll: false,
+    stagedClassification: false,
     extractOnly: false,
     jsonOutput: false,
   };
@@ -135,6 +137,10 @@ export function parseArgs(argv: string[]): Args {
         i += 1;
         break;
       case "--classify-all":
+        args.classifyAll = true;
+        break;
+      case "--staged-classification":
+        args.stagedClassification = true;
         args.classifyAll = true;
         break;
       case "--extract-only":

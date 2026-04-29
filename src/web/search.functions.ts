@@ -7,7 +7,7 @@ import {
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
 } from "@/cli/args";
-import { DEFAULT_CONCURRENCY } from "@/lib/concurrency";
+import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "@/lib/concurrency";
 import { deriveListingDetails } from "@/listing/details";
 
 const SearchRequestSchema = z.object({
@@ -87,55 +87,25 @@ export type SearchUiResult = {
   items: SearchUiItem[];
 };
 
+export type SearchScanJob = {
+  jobId: string;
+  status: "running" | "completed" | "failed";
+  createdAt: number;
+  stage: string;
+  completedListings: number;
+  totalListings: number;
+  result?: SearchUiResult;
+  error?: string;
+};
+
+const searchJobs = new Map<string, SearchScanJob>();
+const JOB_TTL_MS = 1000 * 60 * 30;
+
 export const runSearch = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SearchRequestSchema.parse(input))
   .handler(async ({ data }): Promise<SearchUiResult> => {
-    const { buildSearchUrl, parseNeighborhoodList, scanSearchUrl } = await import("@/core");
-
-    let searchUrl = data.searchUrl?.trim() || "";
-    const warnings: string[] = [];
-    const ignored: string[] = [];
-
-    if (data.mode === "filters") {
-      if (!data.provider) throw new Error("Choose a provider.");
-      const built = buildSearchUrl({
-        provider: data.provider,
-        neighborhoods: Array.isArray(data.neighborhoods)
-          ? data.neighborhoods
-          : parseNeighborhoodList([data.neighborhoods || ""]),
-        minPriceUsd: data.minPriceUsd,
-        maxPriceUsd: data.maxPriceUsd,
-        ambientes: data.ambientes,
-        minAmbientes: data.minAmbientes,
-        maxAmbientes: data.maxAmbientes,
-        dormitorios: data.dormitorios,
-        minDormitorios: data.minDormitorios,
-        maxDormitorios: data.maxDormitorios,
-        checkIn: data.checkIn,
-        checkOut: data.checkOut,
-      });
-      searchUrl = built.url;
-      warnings.push(...built.warnings);
-      ignored.push(...built.ignored);
-    }
-
-    if (!searchUrl) throw new Error("Enter a search URL or filter set.");
-    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for scans.");
-
-    const result = await scanSearchUrl(searchUrl, {
-      model: data.model,
-      escalationModel: data.escalationModel,
-      maxImages: data.maxImages,
-      concurrency: DEFAULT_CONCURRENCY,
-      cacheDir: DEFAULT_CACHE_DIR,
-      extractionCachePath: DEFAULT_EXTRACTION_CACHE,
-      useExtractionCache: true,
-      refreshExtraction: false,
-      maxListings: data.maxListings,
-      maxPages: data.maxPages,
-      includeAll: true,
-      discoverOnly: false,
-    });
+    const { scanSearchUrl, searchUrl, warnings, ignored, scanOptions } = await prepareSearchScan(data);
+    const result = await scanSearchUrl(searchUrl, scanOptions);
 
     return {
       provider: result.search.provider,
@@ -150,6 +120,165 @@ export const runSearch = createServerFn({ method: "POST" })
       items: result.items.map(toUiItem),
     };
   });
+
+export const startSearchScan = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => SearchRequestSchema.parse(input))
+  .handler(async ({ data }): Promise<{ jobId: string }> => {
+    const jobId = crypto.randomUUID();
+    searchJobs.set(jobId, {
+      jobId,
+      status: "running",
+      createdAt: Date.now(),
+      stage: "Preparing search",
+      completedListings: 0,
+      totalListings: 0,
+    });
+
+    void runSearchJob(jobId, data);
+    cleanupOldJobs();
+    return { jobId };
+  });
+
+export const getSearchScanJob = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) => z.object({ jobId: z.string().min(1) }).parse(input))
+  .handler(async ({ data }): Promise<SearchScanJob> => {
+    const job = searchJobs.get(data.jobId);
+    if (!job) throw new Error("Scan job not found.");
+    return job;
+  });
+
+async function prepareSearchScan(data: SearchRequest) {
+  const { buildSearchUrl, parseNeighborhoodList, scanSearchUrl } = await import("@/core");
+
+  let searchUrl = data.searchUrl?.trim() || "";
+  const warnings: string[] = [];
+  const ignored: string[] = [];
+
+  if (data.mode === "filters") {
+    if (!data.provider) throw new Error("Choose a provider.");
+    const built = buildSearchUrl({
+      provider: data.provider,
+      neighborhoods: Array.isArray(data.neighborhoods)
+        ? data.neighborhoods
+        : parseNeighborhoodList([data.neighborhoods || ""]),
+      minPriceUsd: data.minPriceUsd,
+      maxPriceUsd: data.maxPriceUsd,
+      ambientes: data.ambientes,
+      minAmbientes: data.minAmbientes,
+      maxAmbientes: data.maxAmbientes,
+      dormitorios: data.dormitorios,
+      minDormitorios: data.minDormitorios,
+      maxDormitorios: data.maxDormitorios,
+      checkIn: data.checkIn,
+      checkOut: data.checkOut,
+    });
+    searchUrl = built.url;
+    warnings.push(...built.warnings);
+    ignored.push(...built.ignored);
+  }
+
+  if (!searchUrl) throw new Error("Enter a search URL or filter set.");
+  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for scans.");
+
+  return {
+    scanSearchUrl,
+    searchUrl,
+    warnings,
+    ignored,
+    scanOptions: {
+      model: data.model,
+      escalationModel: data.escalationModel,
+      maxImages: data.maxImages,
+      concurrency: DEFAULT_CONCURRENCY,
+      cacheDir: DEFAULT_CACHE_DIR,
+      extractionCachePath: DEFAULT_EXTRACTION_CACHE,
+      useExtractionCache: true,
+      refreshExtraction: false,
+      stagedClassification: true,
+      maxListings: data.maxListings,
+      maxPages: data.maxPages,
+      includeAll: true,
+      discoverOnly: false,
+      listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
+    },
+  };
+}
+
+async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
+  try {
+    const { scanSearchUrl, searchUrl, warnings, ignored, scanOptions } = await prepareSearchScan(data);
+    const partialItems: SearchUiItem[] = [];
+    const result = await scanSearchUrl(
+      searchUrl,
+      scanOptions,
+      ({ index, total }) => {
+        const job = searchJobs.get(jobId);
+        if (!job) return;
+        job.stage = `Scanning listing ${Math.min(index + 1, total)}/${total}`;
+        job.totalListings = total;
+      },
+      (item, index) => {
+        const job = searchJobs.get(jobId);
+        if (!job) return;
+        partialItems[index] = toUiItem(item);
+        job.completedListings = partialItems.filter(Boolean).length;
+        job.stage = `Classified ${job.completedListings}/${job.totalListings || "?"} listings`;
+        job.result = {
+          provider: job.result?.provider || "searching",
+          searchUrl,
+          pageUrls: job.result?.pageUrls || [],
+          listingUrls: job.result?.listingUrls || [],
+          listingCount: job.totalListings,
+          warnings: job.result?.warnings || warnings,
+          ignored,
+          matchCount: partialItems.filter((partial) => partial?.decision === "IN_UNIT").length,
+          failedCount: partialItems.filter((partial) => partial?.failed).length,
+          items: partialItems.filter(Boolean),
+        };
+      },
+    );
+
+    searchJobs.set(jobId, {
+      jobId,
+      status: "completed",
+      createdAt: searchJobs.get(jobId)?.createdAt || Date.now(),
+      stage: "Completed",
+      completedListings: result.items.length,
+      totalListings: result.search.listing_urls.length,
+      result: {
+        provider: result.search.provider,
+        searchUrl: result.search.search_url,
+        pageUrls: result.search.page_urls,
+        listingUrls: result.search.listing_urls,
+        listingCount: result.search.listing_count,
+        warnings: [...result.search.warnings, ...warnings],
+        ignored,
+        matchCount: result.matchCount,
+        failedCount: result.failedCount,
+        items: result.items.map(toUiItem),
+      },
+    });
+  } catch (error) {
+    const job = searchJobs.get(jobId);
+    searchJobs.set(jobId, {
+      jobId,
+      status: "failed",
+      createdAt: job?.createdAt || Date.now(),
+      stage: "Failed",
+      completedListings: job?.completedListings || 0,
+      totalListings: job?.totalListings || 0,
+      result: job?.result,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function cleanupOldJobs() {
+  const cutoff = Date.now() - JOB_TTL_MS;
+  for (const [jobId, job] of searchJobs) {
+    if (job.createdAt < cutoff) searchJobs.delete(jobId);
+  }
+}
 
 function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl>>["items"][number]): SearchUiItem {
   const summary = item.result?.summary || item.failure;

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
+import { withGlobalModelCallSlot } from "./lib/concurrency";
 import type { Args, ImagePayload, Verdict } from "./types";
 import { VerdictSchema } from "./types";
 
@@ -41,25 +42,27 @@ export async function classifyWithModel(
   latency_ms: number;
 }> {
   const startedAt = performance.now();
-  const { data, response } = await client.responses.parse({
-    model,
-    input: [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: classificationPrompt() },
-          {
-            type: "input_image",
-            image_url: image.dataUrl,
-            detail,
-          },
-        ],
+  const { data, response } = await withGlobalModelCallSlot(() =>
+    client.responses.parse({
+      model,
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: classificationPrompt() },
+            {
+              type: "input_image",
+              image_url: image.dataUrl,
+              detail,
+            },
+          ],
+        },
+      ],
+      text: {
+        format: zodTextFormat(VerdictSchema, "washing_machine_location_verdict"),
       },
-    ],
-    text: {
-      format: zodTextFormat(VerdictSchema, "washing_machine_location_verdict"),
-    },
-  }).withResponse();
+    }).withResponse(),
+  );
 
   const latency_ms = Math.round(performance.now() - startedAt);
   const verdict = data.output_parsed;

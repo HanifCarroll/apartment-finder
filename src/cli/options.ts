@@ -23,6 +23,7 @@ export function defaultCommonScanOptions(): CommonScanCliOptions {
     extractionCachePath: DEFAULT_EXTRACTION_CACHE,
     useExtractionCache: true,
     refreshExtraction: false,
+    stagedClassification: false,
     jsonOutput: false,
   };
 }

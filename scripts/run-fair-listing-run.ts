@@ -123,6 +123,7 @@ async function main() {
       listingSummary: false,
       escalationModel: "gpt-5.4",
       classifyAll: true,
+      stagedClassification: false,
       extractOnly: false,
       jsonOutput: true,
     };

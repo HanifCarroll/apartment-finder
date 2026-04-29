@@ -18,6 +18,7 @@ export type ListingScanOptions = {
   extractionCachePath: string;
   useExtractionCache: boolean;
   refreshExtraction: boolean;
+  stagedClassification?: boolean;
 };
 
 export type ListingScanResult = {
@@ -40,6 +41,7 @@ export function toListingSummaryArgs(listingUrl: string, options: ListingScanOpt
     listingSummary: true,
     escalationModel: options.escalationModel,
     classifyAll: true,
+    stagedClassification: options.stagedClassification ?? false,
     extractOnly: false,
     jsonOutput: true,
   };

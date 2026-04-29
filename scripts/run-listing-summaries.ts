@@ -335,6 +335,7 @@ async function main() {
       listingSummary: true,
       escalationModel: args.escalationModel,
       classifyAll: true,
+      stagedClassification: false,
       extractOnly: false,
       jsonOutput: true,
     };

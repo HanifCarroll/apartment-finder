@@ -1,4 +1,5 @@
 import { appendJsonl } from "../lib/jsonl";
+import { DEFAULT_LISTING_CONCURRENCY, mapConcurrent } from "../lib/concurrency";
 import { findListingUrlsFromSearchUrl, type ListingSearchResult } from "../listing/search";
 import type { LocationLabel } from "../types";
 import {
@@ -13,6 +14,7 @@ export type SearchScanOptions = ListingScanOptions & {
   maxPages: number;
   includeAll: boolean;
   discoverOnly: boolean;
+  listingConcurrency?: number;
   outPath?: string;
 };
 
@@ -42,6 +44,7 @@ export async function scanSearchUrl(
   searchUrl: string,
   options: SearchScanOptions,
   onProgress?: (event: { index: number; total: number; listingUrl: string }) => void,
+  onItem?: (item: SearchScanItem, index: number) => void,
 ): Promise<SearchScanResult> {
   const searchResult = await findListingUrlsFromSearchUrl(searchUrl, options.maxListings, options.maxPages);
   const search: SearchScanRecord = {
@@ -62,31 +65,28 @@ export async function scanSearchUrl(
     };
   }
 
-  const items: SearchScanItem[] = [];
-  let matchCount = 0;
-  let printedCount = 0;
-  let failedCount = 0;
-
-  for (let index = 0; index < search.listing_urls.length; index += 1) {
-    const listingUrl = search.listing_urls[index];
+  const listingConcurrency = Math.max(1, options.listingConcurrency ?? DEFAULT_LISTING_CONCURRENCY);
+  const items = await mapConcurrent(search.listing_urls, listingConcurrency, async (listingUrl, index) => {
     onProgress?.({ index, total: search.listing_urls.length, listingUrl });
 
     try {
       const result = await scanListing(listingUrl, options, options.outPath);
       const printed = shouldPrint(result.summary.decision, options.includeAll);
-      if (printed) {
-        matchCount += result.summary.decision === "IN_UNIT" ? 1 : 0;
-        printedCount += 1;
-      }
-      items.push({ listingUrl, printed, failed: false, result });
+      const item: SearchScanItem = { listingUrl, printed, failed: false, result };
+      onItem?.(item, index);
+      return item;
     } catch (error) {
-      failedCount += 1;
       const failure = await appendFailedListingScan(listingUrl, error, options.outPath);
       const printed = options.includeAll;
-      if (printed) printedCount += 1;
-      items.push({ listingUrl, printed, failed: true, failure });
+      const item: SearchScanItem = { listingUrl, printed, failed: true, failure };
+      onItem?.(item, index);
+      return item;
     }
-  }
+  });
+
+  const matchCount = items.filter((item) => item.printed && item.result?.summary.decision === "IN_UNIT").length;
+  const printedCount = items.filter((item) => item.printed).length;
+  const failedCount = items.filter((item) => item.failed).length;
 
   return {
     search,
