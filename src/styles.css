@@ -42,3 +42,25 @@ select,
 textarea {
   font: inherit;
 }
+
+@keyframes result-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-enter {
+  animation: result-enter 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-enter {
+    animation: none;
+  }
+}

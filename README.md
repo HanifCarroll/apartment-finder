@@ -264,6 +264,8 @@ bun run dev
 
 Open `http://localhost:3000`. Web scans require `OPENAI_API_KEY`.
 
+The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=6` model calls and `LISTING_SCAN_CONCURRENCY=6` listing scans. OpenAI rate limits are account, project, and model specific, so override those env vars if the response headers show more or less capacity.
+
 Useful CLI flags:
 
 ```sh
@@ -282,7 +284,7 @@ Image labels live in `fixtures/images.jsonl`.
 ```sh
 bun run eval:fixtures \
   --models gpt-5.4-mini,gpt-5.4-nano \
-  --concurrency 4 \
+  --concurrency 6 \
   --out results/eval-fixtures.jsonl \
   --summary results/eval-fixtures-summary.json
 ```
@@ -296,7 +298,7 @@ bun run summary:listings \
   --model gpt-5.4-mini \
   --escalation-model gpt-5.4 \
   --max-images 35 \
-  --concurrency 4
+  --concurrency 6
 
 bun run eval:listing-summaries \
   --listings fixtures/listings.jsonl \

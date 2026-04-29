@@ -12,7 +12,7 @@ import { extractListingImageUrls } from "./listing/extraction";
 import { classifyWithModel } from "./openai-classifier";
 import type { Args, ImagePayload, Verdict } from "./types";
 
-const STAGED_INITIAL_IMAGE_COUNT = 12;
+const STAGED_BATCH_SIZE = 6;
 
 function shouldStopAfterImage(records: unknown[]): boolean {
   return records.some((record) => {
@@ -285,30 +285,31 @@ async function classifyListing(args: Args): Promise<unknown[]> {
     };
 
     const allIndexes = extraction.image_urls.map((_, index) => index);
-    const initialIndexes = args.stagedClassification
-      ? allIndexes.slice(0, STAGED_INITIAL_IMAGE_COUNT)
-      : allIndexes;
+    if (args.stagedClassification && args.listingSummary) {
+      for (let start = 0; start < allIndexes.length; start += STAGED_BATCH_SIZE) {
+        const batchIndexes = allIndexes.slice(start, start + STAGED_BATCH_SIZE);
+        const batchRecords = await classifyIndexes(batchIndexes);
+        records.push(...batchRecords);
 
-    const initialRecords = await classifyIndexes(initialIndexes);
-    records.push(...initialRecords);
+        const firstPassRecords = records.filter((record): record is ClassificationRecordLike =>
+          Boolean(record && typeof record === "object" && "verdict" in record && (record as { pass?: string }).pass !== "escalation"),
+        );
+        const classifiedIndexes = allIndexes.filter((index) =>
+          firstPassRecords.some((record) => record.listing_image_index === index),
+        );
+        const candidateSummary = await buildSummary(firstPassRecords, classifiedIndexes);
+        const decision = candidateSummary.summary.decision;
+        const confidence = candidateSummary.summary.confidence;
 
-    if (args.listingSummary && args.stagedClassification && initialIndexes.length < allIndexes.length) {
-      const firstPassRecords = initialRecords.filter((record): record is ClassificationRecordLike =>
-        Boolean(record && typeof record === "object" && "verdict" in record),
-      );
-      const firstSummary = await buildSummary(firstPassRecords, initialIndexes);
-      const firstDecision = firstSummary.summary.decision;
-      const firstConfidence = firstSummary.summary.confidence;
-
-      if ((firstDecision === "IN_UNIT" || firstDecision === "SHARED_BUILDING") && firstConfidence !== "low") {
-        records.push(...firstSummary.escalationRecords);
-        records.push(firstSummary.summary);
-        return records;
+        if ((decision === "IN_UNIT" || decision === "SHARED_BUILDING") && confidence === "high") {
+          records.push(...candidateSummary.escalationRecords);
+          records.push(candidateSummary.summary);
+          return records;
+        }
       }
-
-      const remainingIndexes = allIndexes.slice(initialIndexes.length);
-      const remainingRecords = await classifyIndexes(remainingIndexes);
-      records.push(...remainingRecords);
+    } else {
+      const imageRecords = await classifyIndexes(allIndexes);
+      records.push(...imageRecords);
     }
 
     if (args.stagedClassification && !args.listingSummary) {

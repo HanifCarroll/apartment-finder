@@ -1,5 +1,10 @@
-export const DEFAULT_CONCURRENCY = 4;
-export const DEFAULT_LISTING_CONCURRENCY = 3;
+function envPositiveInteger(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+export const DEFAULT_CONCURRENCY = envPositiveInteger("OPENAI_MODEL_CONCURRENCY", 6);
+export const DEFAULT_LISTING_CONCURRENCY = envPositiveInteger("LISTING_SCAN_CONCURRENCY", 6);
 
 export async function mapConcurrent<T, R>(
   items: T[],

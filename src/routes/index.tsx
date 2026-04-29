@@ -559,17 +559,20 @@ function ListingResult({
   const decision = item.failed ? "FAILED" : item.decision || "UNKNOWN";
 
   return (
-    <Card className="overflow-hidden">
+    <Card
+      className="result-enter overflow-hidden shadow-none transition-colors hover:border-ring/60"
+      style={{ animationDelay: `${Math.min(index - 1, 8) * 35}ms` }}
+    >
       <button
         type="button"
-        className="grid w-full grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left hover:bg-muted/50"
+        className="grid w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setExpanded((current) => !current)}
       >
         <div className="font-mono text-xs text-muted-foreground">{index}</div>
         <div className="min-w-0">
-          <div className="truncate font-medium">{listing.title}</div>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{listing.id || listing.host}</span>
+          <div className="truncate font-medium" title={listing.title}>{listing.title}</div>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="font-medium text-muted-foreground/90">{listing.id || listing.host}</span>
             {formatPrice(item) ? <span>{formatPrice(item)}</span> : null}
             {item.neighborhood ? <span>{item.neighborhood}</span> : null}
             {formatArea(item) ? <span>{formatArea(item)}</span> : null}
