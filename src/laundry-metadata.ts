@@ -12,6 +12,9 @@ export function decodeBasicHtmlEntities(text: string): string {
     .replace(/&#xED;/gi, "í")
     .replace(/&#xF3;/gi, "ó")
     .replace(/&#xFA;/gi, "ú")
+    .replace(/&#xB2;/gi, "²")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
     .replace(/\\u0026/g, "&");
 }
 

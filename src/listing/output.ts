@@ -1,5 +1,6 @@
 import type { LocationLabel } from "../types";
 import type { LaundryMetadataSignal } from "../types";
+import type { ListingAmenityGroup } from "../types";
 
 export type ListingSummaryRecord = {
   ok?: boolean;
@@ -35,6 +36,22 @@ export type ListingExtractionRecord = {
   provider?: string;
   listing_title?: string;
   listing_description?: string;
+  listing_price_text?: string;
+  listing_expenses_text?: string;
+  listing_neighborhood?: string;
+  listing_total_area_m2?: number;
+  listing_covered_area_m2?: number;
+  listing_ambientes?: number;
+  listing_dormitorios?: number;
+  listing_bathrooms?: number;
+  listing_age_years?: number;
+  listing_property_type?: string;
+  listing_condition?: string;
+  listing_disposition?: string;
+  listing_orientation?: string;
+  listing_luminosity?: string;
+  listing_features?: string[];
+  listing_amenities?: ListingAmenityGroup[];
   listing_url?: string;
   image_urls?: string[];
   gallery_count?: number | null;

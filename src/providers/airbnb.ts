@@ -1,5 +1,6 @@
 import type { ListingExtraction } from "../types";
 import { classifyAirbnbLaundryAmenitySignal } from "../laundry-metadata";
+import { deriveListingDetails } from "../listing/details";
 
 function decodeHtmlEntities(text: string): string {
   return text
@@ -136,6 +137,46 @@ function extractImageUrls(html: string): string[] {
   return Array.from(urls);
 }
 
+function parseAirbnbAmenities(html: string): ListingExtraction["listing_amenities"] {
+  const byGroup = new Map<string, Set<string>>();
+  const rowPattern = /id=["']pdp_v3_([^"'_]+(?:_[^"'_]+)*)_\d+_[^"']*row-title["'][^>]*>([\s\S]*?)<\/div>/gi;
+
+  for (const match of html.matchAll(rowPattern)) {
+    const group = cleanText(match[1].replace(/_/g, " "))
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const item = cleanText(match[2]).replace(/^Unavailable:\s*/i, "");
+    if (!group || !item || item.length > 120) continue;
+    const items = byGroup.get(group) || new Set<string>();
+    items.add(item);
+    byGroup.set(group, items);
+  }
+
+  if (byGroup.size === 0) {
+    const items = new Set<string>();
+    const amenityPattern = /\b(wifi|kitchen|washer|dryer|tv|air conditioning|heating|bathtub|hair dryer|cleaning products|soap|bidet|hot water|hangers|bed linens|pillows|blankets|shades|iron|drying rack|clothing storage|refrigerator|microwave|cooking basics|dishes|silverware|freezer|stove|oven|kettle|coffee maker|toaster|patio|balcony|outdoor|parking|elevator|workspace|fire extinguisher|self check-in|keypad)\b/i;
+    for (const match of html.matchAll(/"title"\s*:\s*"([^"]+)"/gi)) {
+      const item = cleanText(match[1]);
+      if (!item || item.length > 120) continue;
+      if (!amenityPattern.test(item)) continue;
+      if (/^(what this place offers|not included|show all|where you'll sleep)$/i.test(item)) continue;
+      if (/^(bathroom|bedroom and laundry|entertainment|heating and cooling|home safety|internet and office|kitchen and dining|outdoor|parking and facilities|services)$/i.test(item)) continue;
+      items.add(item.replace(/^Unavailable:\s*/i, ""));
+    }
+    if (items.size > 0) byGroup.set("Amenities", items);
+  }
+
+  return Array.from(byGroup.entries())
+    .map(([group, items]) => ({ group, items: Array.from(items).slice(0, 24) }))
+    .filter((group) => group.items.length > 0);
+}
+
+function parseAirbnbPrice(html: string): string | undefined {
+  const text = cleanText(html);
+  const match = text.match(/\b(?:USD|US\$|\$)\s*([\d.,]+)\b/i);
+  if (!match) return undefined;
+  return match[0].startsWith("$") ? `USD ${match[1]}` : match[0];
+}
+
 export async function extractAirbnbListingImageUrls(
   listingUrl: string,
   maxImages: number,
@@ -149,10 +190,12 @@ export async function extractAirbnbListingImageUrls(
     ? classifyAirbnbLaundryAmenitySignal(laundryAmenity.airbnb_laundry_amenity_text)
     : null;
 
-  return {
+  const baseExtraction = {
     provider: "airbnb",
     listing_title: parseMetaContent(html, "og:title"),
     listing_description: parseMetaContent(html, "og:description") || parseMetaContent(html, "description"),
+    listing_price_text: parseAirbnbPrice(html),
+    listing_amenities: parseAirbnbAmenities(html),
     ...laundryAmenity,
     metadata_laundry_signals: airbnbSignal ? [airbnbSignal] : [],
     listing_url: listingUrl,
@@ -162,5 +205,10 @@ export async function extractAirbnbListingImageUrls(
     gallery_count: galleryCount,
     gallery_count_matches_extracted: galleryCount === null ? null : galleryCount === imageUrls.length,
     gallery_text: galleryCount === null ? "" : `${galleryCount} photos`,
+  } satisfies ListingExtraction;
+
+  return {
+    ...baseExtraction,
+    ...deriveListingDetails(baseExtraction),
   };
 }

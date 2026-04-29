@@ -55,6 +55,22 @@ export type ListingExtraction = {
   provider?: "zonaprop" | "argenprop" | "airbnb";
   listing_title?: string;
   listing_description?: string;
+  listing_price_text?: string;
+  listing_expenses_text?: string;
+  listing_neighborhood?: string;
+  listing_total_area_m2?: number;
+  listing_covered_area_m2?: number;
+  listing_ambientes?: number;
+  listing_dormitorios?: number;
+  listing_bathrooms?: number;
+  listing_age_years?: number;
+  listing_property_type?: string;
+  listing_condition?: string;
+  listing_disposition?: string;
+  listing_orientation?: string;
+  listing_luminosity?: string;
+  listing_features?: string[];
+  listing_amenities?: ListingAmenityGroup[];
   airbnb_laundry_amenity_label?: "WASHER" | "WASHER_IN_UNIT" | "WASHER_IN_BUILDING" | "NONE";
   airbnb_laundry_amenity_text?: string;
   metadata_laundry_signals?: LaundryMetadataSignal[];
@@ -69,6 +85,11 @@ export type ListingExtraction = {
   extraction_attempts?: number;
   extraction_error?: string;
   cached_at?: string;
+};
+
+export type ListingAmenityGroup = {
+  group: string;
+  items: string[];
 };
 
 export type PlaywriterListingPayload = Omit<

@@ -8,6 +8,7 @@ import {
   DEFAULT_MODEL,
 } from "@/cli/args";
 import { DEFAULT_CONCURRENCY } from "@/lib/concurrency";
+import { deriveListingDetails } from "@/listing/details";
 
 const SearchRequestSchema = z.object({
   mode: z.enum(["url", "filters"]),
@@ -43,6 +44,22 @@ export type SearchUiItem = {
   amenity?: string;
   title?: string;
   description?: string;
+  price?: string;
+  neighborhood?: string;
+  totalAreaM2?: number;
+  coveredAreaM2?: number;
+  ambientes?: number;
+  dormitorios?: number;
+  bathrooms?: number;
+  ageYears?: number;
+  propertyType?: string;
+  condition?: string;
+  disposition?: string;
+  orientation?: string;
+  luminosity?: string;
+  features: string[];
+  amenities: Array<{ group: string; items: string[] }>;
+  expenses?: string;
   imageUrls: string[];
   imageCount?: number;
   galleryCount?: number | null;
@@ -137,6 +154,20 @@ export const runSearch = createServerFn({ method: "POST" })
 function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl>>["items"][number]): SearchUiItem {
   const summary = item.result?.summary || item.failure;
   const extraction = item.result?.extraction;
+  const details = deriveListingDetails({
+    listing_url: item.listingUrl,
+    listing_title: extraction?.listing_title,
+    listing_description: extraction?.listing_description,
+    listing_price_text: extraction?.listing_price_text,
+    listing_expenses_text: extraction?.listing_expenses_text,
+    listing_neighborhood: extraction?.listing_neighborhood,
+    listing_total_area_m2: extraction?.listing_total_area_m2,
+    listing_covered_area_m2: extraction?.listing_covered_area_m2,
+    listing_ambientes: extraction?.listing_ambientes,
+    listing_dormitorios: extraction?.listing_dormitorios,
+    listing_bathrooms: extraction?.listing_bathrooms,
+    listing_age_years: extraction?.listing_age_years,
+  });
   return {
     listingUrl: item.listingUrl,
     failed: item.failed,
@@ -147,6 +178,22 @@ function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl
     amenity: summary?.airbnb_laundry_amenity_text || extraction?.airbnb_laundry_amenity_text,
     title: extraction?.listing_title,
     description: extraction?.listing_description,
+    price: details.listing_price_text,
+    expenses: details.listing_expenses_text,
+    neighborhood: details.listing_neighborhood,
+    totalAreaM2: details.listing_total_area_m2,
+    coveredAreaM2: details.listing_covered_area_m2,
+    ambientes: details.listing_ambientes,
+    dormitorios: details.listing_dormitorios,
+    bathrooms: details.listing_bathrooms,
+    ageYears: details.listing_age_years,
+    propertyType: extraction?.listing_property_type,
+    condition: extraction?.listing_condition,
+    disposition: extraction?.listing_disposition,
+    orientation: extraction?.listing_orientation,
+    luminosity: extraction?.listing_luminosity,
+    features: extraction?.listing_features || [],
+    amenities: extraction?.listing_amenities || [],
     imageUrls: extraction?.image_urls || [],
     imageCount: summary?.image_count ?? extraction?.image_count,
     galleryCount: extraction?.gallery_count,

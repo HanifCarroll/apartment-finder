@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { createServerFn, useServerFn } from "@tanstack/react-start";
 import {
   AlertCircle,
   Building2,
@@ -28,6 +28,7 @@ import { runSearch, type SearchUiResult } from "@/web/search.functions";
 import { supportedNeighborhoodOptions, type SupportedNeighborhood } from "@/core/search-url-builder";
 
 export const Route = createFileRoute("/")({
+  loader: () => getInitialPreferences(),
   component: HomePage,
 });
 
@@ -86,10 +87,22 @@ const LOADING_STAGES = [
   "Ranking and filtering results",
 ];
 
+const FORM_STORAGE_KEY = "apartment-finder.search-form.v1";
+const RESULT_FILTER_STORAGE_KEY = "apartment-finder.result-filter.v1";
+const FORM_COOKIE_KEY = "apartment_finder_search_form_v1";
+const RESULT_FILTER_COOKIE_KEY = "apartment_finder_result_filter_v1";
+const PREFERENCE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
+
+const getInitialPreferences = createServerFn({ method: "GET" }).handler(async () => {
+  const { getRequestHeader } = await import("@tanstack/react-start/server");
+  return readInitialPreferencesFromCookieHeader(getRequestHeader("cookie") || "");
+});
+
 function HomePage() {
   const runSearchFn = useServerFn(runSearch);
-  const [form, setForm] = React.useState<FormState>(defaultForm);
-  const [resultFilter, setResultFilter] = React.useState<ResultFilter>("ALL");
+  const initialPreferences = Route.useLoaderData();
+  const [form, setForm] = React.useState<FormState>(() => readStoredForm(initialPreferences.form));
+  const [resultFilter, setResultFilter] = React.useState<ResultFilter>(() => readStoredResultFilter(initialPreferences.resultFilter));
   const [lightbox, setLightbox] = React.useState<{ images: string[]; index: number; title: string } | null>(null);
 
   const searchMutation = useMutation({
@@ -99,6 +112,16 @@ function HomePage() {
 
   const result = searchMutation.data;
   const loadingStage = useLoadingStage(searchMutation.isPending);
+
+  React.useEffect(() => {
+    window.localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(form));
+    writePreferenceCookie(FORM_COOKIE_KEY, JSON.stringify(form));
+  }, [form]);
+
+  React.useEffect(() => {
+    window.localStorage.setItem(RESULT_FILTER_STORAGE_KEY, resultFilter);
+    writePreferenceCookie(RESULT_FILTER_COOKIE_KEY, resultFilter);
+  }, [resultFilter]);
 
   return (
     <main className="h-screen overflow-hidden bg-background">
@@ -521,15 +544,19 @@ function ListingResult({
           <div className="truncate font-medium">{listing.title}</div>
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{listing.id || listing.host}</span>
+            {formatPrice(item) ? <span>{formatPrice(item)}</span> : null}
+            {item.neighborhood ? <span>{item.neighborhood}</span> : null}
+            {formatArea(item) ? <span>{formatArea(item)}</span> : null}
+            {formatRooms(item) ? <span>{formatRooms(item)}</span> : null}
             <span>{item.imageCount ?? item.imageUrls.length}/{item.galleryCount ?? "?"} photos</span>
             {item.source ? <span>{item.source}</span> : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={item.decision === "IN_UNIT" ? "default" : item.failed ? "destructive" : "outline"}>
-            {decision}
+            {formatDecision(decision)}
           </Badge>
-          {item.confidence ? <Badge variant="secondary">{item.confidence}</Badge> : null}
+          {item.confidence ? <Badge variant="secondary">{formatConfidence(item.confidence)}</Badge> : null}
         </div>
       </button>
 
@@ -542,8 +569,14 @@ function ListingResult({
                 Open listing
               </a>
             </Button>
+            {formatPrice(item) ? <Badge variant="outline">{formatPrice(item)}</Badge> : null}
+            {item.neighborhood ? <Badge variant="outline">{item.neighborhood}</Badge> : null}
+            {formatArea(item) ? <Badge variant="outline">{formatArea(item)}</Badge> : null}
+            {formatRooms(item) ? <Badge variant="outline">{formatRooms(item)}</Badge> : null}
+            {typeof item.bathrooms === "number" ? <Badge variant="outline">{item.bathrooms} baño{item.bathrooms === 1 ? "" : "s"}</Badge> : null}
+            {typeof item.ageYears === "number" ? <Badge variant="outline">{item.ageYears} años</Badge> : null}
             {item.amenity ? <Badge variant="outline">{item.amenity}</Badge> : null}
-            <Badge variant="outline">Gallery {item.imageCount ?? item.imageUrls.length}/{item.galleryCount ?? "?"}</Badge>
+            <Badge variant="outline">{item.imageCount ?? item.imageUrls.length} Photos</Badge>
           </div>
 
           {item.description ? (
@@ -553,6 +586,37 @@ function ListingResult({
           )}
 
           {item.error ? <div className="rounded-md bg-muted p-3 text-sm text-destructive">{item.error}</div> : null}
+
+          {item.features.length || item.amenities.length ? (
+            <details className="rounded-md border p-3">
+              <summary className="cursor-pointer text-sm font-medium">Listing details</summary>
+              {item.features.length ? (
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Property Features</div>
+                  <div className="flex flex-wrap gap-2">
+                    {item.features.map((feature) => (
+                      <Badge key={`${item.listingUrl}-${feature}`} variant="outline">{feature}</Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {item.amenities.length ? (
+                <div className="mt-3 space-y-3">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Amenities</div>
+                  {item.amenities.map((group) => (
+                    <div key={`${item.listingUrl}-${group.group}`} className="space-y-1.5">
+                      <div className="text-sm font-medium">{group.group}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {group.items.map((amenity) => (
+                          <Badge key={`${item.listingUrl}-${group.group}-${amenity}`} variant="secondary">{amenity}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </details>
+          ) : null}
 
           {item.evidence.length ? (
             <div className="space-y-2">
@@ -609,6 +673,42 @@ function matchesResultFilter(item: SearchUiResult["items"][number], filter: Resu
   const decision = item.failed ? "UNKNOWN" : item.decision || "UNKNOWN";
   if (filter === "UNKNOWN") return decision !== "IN_UNIT" && decision !== "SHARED_BUILDING";
   return decision === filter;
+}
+
+function formatRooms(item: SearchUiResult["items"][number]): string {
+  return [
+    typeof item.ambientes === "number" ? `${item.ambientes} amb` : "",
+    typeof item.dormitorios === "number" ? `${item.dormitorios} dorm` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function formatPrice(item: SearchUiResult["items"][number]): string {
+  return [
+    item.price || "",
+    item.expenses ? `expensas ${item.expenses}` : "",
+  ].filter(Boolean).join(" + ");
+}
+
+function formatDecision(decision: string): string {
+  if (decision === "IN_UNIT") return "Washer in unit";
+  if (decision === "SHARED_BUILDING") return "Shared laundry";
+  if (decision === "CONFLICTING") return "Needs review";
+  if (decision === "FAILED") return "Scan failed";
+  return "No washer found";
+}
+
+function formatConfidence(confidence: string): string {
+  if (confidence === "high") return "High confidence";
+  if (confidence === "medium") return "Medium confidence";
+  if (confidence === "low") return "Low confidence";
+  return confidence;
+}
+
+function formatArea(item: SearchUiResult["items"][number]): string {
+  return [
+    typeof item.totalAreaM2 === "number" ? `${item.totalAreaM2} m² tot` : "",
+    typeof item.coveredAreaM2 === "number" ? `${item.coveredAreaM2} m² cub` : "",
+  ].filter(Boolean).join(" · ");
 }
 
 function countResultFilters(items: SearchUiResult["items"]): Record<ResultFilter, number> {
@@ -744,21 +844,23 @@ function ImageLightbox({
       </div>
 
       {images.length > 1 ? (
-        <div className="mt-3 flex shrink-0 gap-2 overflow-x-auto pb-1" onClick={(event) => event.stopPropagation()}>
-          {images.map((url, photoIndex) => (
-            <button
-              key={`${url}-${photoIndex}`}
-              type="button"
-              className={[
-                "h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-white/10",
-                photoIndex === activeIndex ? "border-white" : "border-white/20 opacity-70 hover:opacity-100",
-              ].join(" ")}
-              aria-label={`Show photo ${photoIndex + 1}`}
-              onClick={() => onChangeIndex(photoIndex)}
-            >
-              <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
-            </button>
-          ))}
+        <div className="mt-3 shrink-0 overflow-x-auto pb-1" onClick={(event) => event.stopPropagation()}>
+          <div className="mx-auto flex w-max gap-2">
+            {images.map((url, photoIndex) => (
+              <button
+                key={`${url}-${photoIndex}`}
+                type="button"
+                className={[
+                  "h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-white/10",
+                  photoIndex === activeIndex ? "border-white" : "border-white/20 opacity-70 hover:opacity-100",
+                ].join(" ")}
+                aria-label={`Show photo ${photoIndex + 1}`}
+                onClick={() => onChangeIndex(photoIndex)}
+              >
+                <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
@@ -1017,6 +1119,84 @@ function updateForm(
   patch: Partial<FormState>,
 ) {
   setForm((current) => ({ ...current, ...patch }));
+}
+
+function isResultFilter(value: string | null): value is ResultFilter {
+  return value === "ALL" || value === "IN_UNIT" || value === "SHARED_BUILDING" || value === "UNKNOWN";
+}
+
+function readStoredResultFilter(fallback: ResultFilter = "ALL"): ResultFilter {
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(RESULT_FILTER_STORAGE_KEY);
+  return isResultFilter(stored) ? stored : fallback;
+}
+
+function readStoredForm(fallback: FormState = defaultForm): FormState {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FORM_STORAGE_KEY) || "null") as Partial<FormState> | null;
+    return normalizeStoredForm(parsed, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeStoredForm(value: Partial<FormState> | null, fallback: FormState = defaultForm): FormState {
+  if (!value || typeof value !== "object") return fallback;
+  return {
+    ...fallback,
+    ...value,
+    mode: value.mode === "url" ? "url" : "filters",
+    provider: value.provider === "argenprop" || value.provider === "airbnb" ? value.provider : "zonaprop",
+    neighborhoods: Array.isArray(value.neighborhoods)
+      ? value.neighborhoods.filter((item) => typeof item === "string")
+      : fallback.neighborhoods,
+  };
+}
+
+function parseCookieHeader(header: string): Record<string, string> {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const separatorIndex = part.indexOf("=");
+        if (separatorIndex === -1) return [part, ""];
+        return [part.slice(0, separatorIndex), part.slice(separatorIndex + 1)];
+      }),
+  );
+}
+
+function readInitialPreferencesFromCookieHeader(cookieHeader: string): { form: FormState; resultFilter: ResultFilter } {
+  const cookies = parseCookieHeader(cookieHeader);
+  let form = defaultForm;
+  let resultFilter: ResultFilter = "ALL";
+
+  try {
+    const rawForm = cookies[FORM_COOKIE_KEY] ? decodeURIComponent(cookies[FORM_COOKIE_KEY]) : "";
+    form = normalizeStoredForm(JSON.parse(rawForm || "null") as Partial<FormState> | null);
+  } catch {
+    form = defaultForm;
+  }
+
+  try {
+    const rawFilter = cookies[RESULT_FILTER_COOKIE_KEY] ? decodeURIComponent(cookies[RESULT_FILTER_COOKIE_KEY]) : "";
+    resultFilter = isResultFilter(rawFilter) ? rawFilter : "ALL";
+  } catch {
+    resultFilter = "ALL";
+  }
+
+  return { form, resultFilter };
+}
+
+function writePreferenceCookie(name: string, value: string) {
+  document.cookie = [
+    `${name}=${encodeURIComponent(value)}`,
+    `Max-Age=${PREFERENCE_COOKIE_MAX_AGE_SECONDS}`,
+    "Path=/",
+    "SameSite=Lax",
+  ].join("; ");
 }
 
 function toSearchPayload(form: FormState) {

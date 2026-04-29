@@ -1,5 +1,6 @@
 import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "../browser/playwriter-json";
 import { findListingUrlsFromSearchUrl } from "../listing/search";
+import { deriveListingDetails } from "../listing/details";
 import type { ListingExtraction, PlaywriterListingPayload } from "../types";
 
 const PLAYWRITER_JSON_START = "__APARTMENT_FINDER_JSON_START__";
@@ -126,6 +127,24 @@ async function clickGalleryButton() {
   return false;
 }
 
+async function expandDescription() {
+  const candidates = [
+    state.page.getByRole('button', { name: /Leer descripción completa/i }),
+    state.page.locator('button:has-text("Leer descripción completa")'),
+    state.page.locator('text=/Leer descripción completa/i'),
+  ];
+  for (const locator of candidates) {
+    try {
+      if (await locator.first().isVisible({ timeout: 1200 })) {
+        await locator.first().click({ timeout: 4000 });
+        await state.page.waitForTimeout(500);
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
 async function scrollLazyContainers() {
   for (let i = 0; i < 8; i += 1) {
     await state.page.evaluate(() => {
@@ -159,15 +178,64 @@ if (clickedGallery) {
   await state.page.waitForTimeout(1500);
 }
 await scrollLazyContainers();
+await expandDescription();
 
 const imageUrls = uniqueZonapropImageUrls([
   ...Array.from(state.zonapropImageUrls),
   ...await state.page.evaluate(collectDomImageUrls),
 ]);
+const listingMeta = await state.page.evaluate(() => {
+  function cleanPageText(text) {
+    const div = document.createElement('div');
+    div.innerHTML = String(text || '');
+    return (div.textContent || div.innerText || '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+  function metaContent(key) {
+    const selector = [
+      \`meta[property="\${key}"]\`,
+      \`meta[name="\${key}"]\`,
+    ].join(',');
+    return cleanPageText(document.querySelector(selector)?.getAttribute('content') || '');
+  }
+  const bodyText = cleanPageText(document.body?.innerText || document.body?.textContent || '');
+  const price = bodyText.match(/\\b(?:USD|US\\$|U\\$S)\\s*([\\d.,]+)/i)?.[0] || '';
+  const ambientes = Number(bodyText.match(/\\b(\\d{1,2})\\s*(?:amb\\.?|ambientes?)\\b/i)?.[1] || '') || undefined;
+  const dormitorios = Number(bodyText.match(/\\b(\\d{1,2})\\s*(?:dorm\\.?|dormitorios?|habitaciones?)\\b/i)?.[1] || '') || undefined;
+  const featureItems = Array.from(document.querySelectorAll('#section-icon-features-property li, .section-icon-features-property li'))
+    .map((item) => cleanPageText(item.textContent || ''))
+    .filter(Boolean);
+  const findFeature = (pattern) => featureItems.find((item) => pattern.test(item)) || '';
+  const parseFeatureNumber = (pattern) => Number(findFeature(pattern).match(/\\d{1,4}/)?.[0] || '') || undefined;
+  const descriptionContainers = Array.from(document.querySelectorAll('[class*="description"], [id*="description"], [data-qa*="description"]'))
+    .map((item) => cleanPageText(item.textContent || ''))
+    .filter((text) => text && !/Leer descripción completa/i.test(text))
+    .sort((a, b) => b.length - a.length);
+  const description = descriptionContainers[0] || metaContent('og:description') || metaContent('description');
+  const expenses = description.match(/\\b(?:expensas?|gastos)[^$]{0,80}((?:USD|US\\$|U\\$S|\\$)\\s*[\\d.,]+)/i)?.[1]
+    || bodyText.match(/\\b(?:expensas?|gastos)[^$]{0,80}((?:USD|US\\$|U\\$S|\\$)\\s*[\\d.,]+)/i)?.[1]
+    || '';
+  return {
+    listing_title: metaContent('og:title') || cleanPageText(document.querySelector('h1')?.textContent || ''),
+    listing_description: description,
+    listing_price_text: price,
+    listing_expenses_text: expenses,
+    listing_total_area_m2: parseFeatureNumber(/m²\\s*tot|m2\\s*tot/i),
+    listing_covered_area_m2: parseFeatureNumber(/m²\\s*cub|m2\\s*cub/i),
+    listing_ambientes: ambientes,
+    listing_dormitorios: dormitorios,
+    listing_bathrooms: parseFeatureNumber(/ba[nñ]o/i),
+    listing_age_years: parseFeatureNumber(/a[nñ]os/i),
+    listing_disposition: findFeature(/Contrafrente|Frente|Lateral|Interno/i) || undefined,
+    listing_orientation: findFeature(/^(N|S|E|O|NE|NO|SE|SO)$/i) || undefined,
+    listing_luminosity: findFeature(/luminoso/i) || undefined,
+    listing_features: featureItems,
+  };
+});
 const payload = {
   listing_url: listingUrl,
-  listing_title: metaContent('og:title') || cleanText(document.querySelector('h1')?.textContent || ''),
-  listing_description: metaContent('og:description') || metaContent('description'),
+  ...listingMeta,
   page_url: state.page.url(),
   clicked_gallery: clickedGallery,
   gallery_count: galleryMeta.gallery_count,
@@ -189,12 +257,17 @@ export async function extractListingImageUrlsWithPlaywriter(
   const payload = parsePlaywriterJson<PlaywriterListingPayload>(stdout, PLAYWRITER_JSON_START, PLAYWRITER_JSON_END);
   const imageUrls = uniqueZonapropImageUrls(payload.image_urls, maxImages);
 
-  return {
+  const baseExtraction = {
     ...payload,
     session_id: sessionId,
     image_urls: imageUrls,
     gallery_count_matches_extracted:
       payload.gallery_count === null ? null : payload.gallery_count === imageUrls.length,
+  } satisfies ListingExtraction;
+
+  return {
+    ...baseExtraction,
+    ...deriveListingDetails(baseExtraction),
   };
 }
 

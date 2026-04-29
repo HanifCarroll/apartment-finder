@@ -1,5 +1,6 @@
 import type { ListingExtraction } from "../types";
 import { decodeBasicHtmlEntities } from "../laundry-metadata";
+import { deriveListingDetails } from "../listing/details";
 
 const ARG_PROP_ORIGIN = "https://www.argenprop.com";
 
@@ -101,6 +102,49 @@ function extractImageUrls(html: string): string[] {
   return Array.from(urls);
 }
 
+function parsePropertyFeatures(html: string): Partial<ListingExtraction> {
+  const features: string[] = [];
+  const result: Partial<ListingExtraction> = {};
+  const listMatch = html.match(/<ul[^>]+class=["'][^"']*property-main-features[^"']*["'][^>]*>([\s\S]*?)<\/ul>/i)?.[1] || "";
+
+  for (const liMatch of listMatch.matchAll(/<li(?:\s+title=["']([^"']+)["'])?[^>]*>([\s\S]*?)<\/li>/gi)) {
+    const title = cleanText(liMatch[1] || "");
+    const value = cleanText(liMatch[2] || "");
+    if (!value) continue;
+    const feature = value;
+    features.push(feature);
+
+    const lowerTitle = title.toLowerCase();
+    const lowerValue = value.toLowerCase();
+    const number = Number.parseInt(value.match(/\d{1,4}/)?.[0] || "", 10);
+    if (/cubierta/.test(lowerTitle) && Number.isFinite(number)) result.listing_covered_area_m2 = number;
+    if (/dormitorios/.test(lowerTitle) && Number.isFinite(number)) result.listing_dormitorios = number;
+    if (/antig/.test(lowerTitle) && Number.isFinite(number)) result.listing_age_years = number;
+    if (/baños|banos/.test(lowerTitle) && Number.isFinite(number)) result.listing_bathrooms = number;
+    if (/ambientes/.test(lowerTitle) && Number.isFinite(number)) result.listing_ambientes = number;
+    if (/estado/.test(lowerTitle)) result.listing_condition = value;
+    if (/disposici/.test(lowerTitle)) result.listing_disposition = value;
+    if (/departamento|casa|monoambiente/.test(lowerValue) && !result.listing_property_type) {
+      result.listing_property_type = value;
+    }
+  }
+
+  return {
+    ...result,
+    listing_features: features,
+  };
+}
+
+function parseMoneyText(html: string, labelPattern?: RegExp): string | undefined {
+  const text = cleanText(html);
+  const scoped = labelPattern ? text.match(labelPattern)?.[0] || "" : text;
+  const match = (scoped || text).match(/\b(?:USD|US\$|U\$S|\$)\s*[\d.,]+/i);
+  if (!match) return undefined;
+  const digitCount = match[0].replace(/\D/g, "").length;
+  if (digitCount < 3) return undefined;
+  return match[0].replace(/^US\$|^U\$S/i, "USD").replace(/^USD\s*/i, "USD ");
+}
+
 export async function extractArgenpropListingImageUrls(
   listingUrl: string,
   maxImages: number,
@@ -119,10 +163,13 @@ export async function extractArgenpropListingImageUrls(
         maxImages,
       );
 
-  return {
+  const baseExtraction = {
     provider: "argenprop",
     listing_title: parseMetaContent(listingHtml, "og:title"),
     listing_description: parseMetaContent(listingHtml, "og:description") || parseMetaContent(listingHtml, "description"),
+    listing_price_text: parseMoneyText(listingHtml),
+    listing_expenses_text: parseMoneyText(listingHtml, /\b(?:expensas?|gastos)[\s\S]{0,80}/i),
+    ...parsePropertyFeatures(listingHtml),
     listing_url: listingUrl,
     page_url: listingUrl,
     image_urls: imageUrls,
@@ -130,5 +177,10 @@ export async function extractArgenpropListingImageUrls(
     gallery_count: galleryCount,
     gallery_count_matches_extracted: galleryCount === null ? null : galleryCount === imageUrls.length,
     gallery_text: galleryCount === null ? "" : `${galleryCount} fotos`,
+  } satisfies ListingExtraction;
+
+  return {
+    ...baseExtraction,
+    ...deriveListingDetails(baseExtraction),
   };
 }
