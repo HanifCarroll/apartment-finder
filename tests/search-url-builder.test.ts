@@ -26,6 +26,23 @@ describe("buildSearchUrl", () => {
     expect(result.ignored).toEqual([]);
   });
 
+  it("builds a Zonaprop URL with min and max filter ranges", () => {
+    const result = buildSearchUrl({
+      provider: "zonaprop",
+      neighborhoods: ["nunez"],
+      minPriceUsd: 1000,
+      maxPriceUsd: 1500,
+      minAmbientes: 2,
+      maxAmbientes: 3,
+      minDormitorios: 1,
+      maxDormitorios: 2,
+    });
+
+    expect(result.url).toBe(
+      "https://www.zonaprop.com.ar/inmuebles-alquiler-temporal-nunez-con-amoblado-mas-de-1-ambientes-hasta-3-ambientes-hasta-2-habitaciones-1000-1500-dolar.html",
+    );
+  });
+
   it("builds a furnished Argenprop URL with provider-specific path segments", () => {
     const result = buildSearchUrl({
       provider: "argenprop",
@@ -36,6 +53,23 @@ describe("buildSearchUrl", () => {
 
     expect(result.url).toBe(
       "https://www.argenprop.com/departamentos/alquiler-temporal/las-canitas-o-nunez/1-dormitorios/dolares-hasta-1500?con-amoblado",
+    );
+  });
+
+  it("builds an Argenprop URL with min and max filter ranges", () => {
+    const result = buildSearchUrl({
+      provider: "argenprop",
+      neighborhoods: ["belgrano"],
+      minPriceUsd: 1000,
+      maxPriceUsd: 1500,
+      minAmbientes: 2,
+      maxAmbientes: 3,
+      minDormitorios: 1,
+      maxDormitorios: 2,
+    });
+
+    expect(result.url).toBe(
+      "https://www.argenprop.com/departamentos/alquiler-temporal/belgrano/2-ambientes-o-3-ambientes/1-dormitorios-o-2-dormitorios/dolares-1000-1500?con-amoblado",
     );
   });
 
@@ -64,6 +98,22 @@ describe("buildSearchUrl", () => {
       provider: "zonaprop",
       neighborhoods: ["not-a-real-neighborhood"],
     })).toThrow("Unsupported neighborhood");
+  });
+
+  it("rejects invalid filter ranges", () => {
+    expect(() => buildSearchUrl({
+      provider: "zonaprop",
+      neighborhoods: ["nunez"],
+      minPriceUsd: 1500,
+      maxPriceUsd: 1000,
+    })).toThrow("Invalid price range");
+
+    expect(() => buildSearchUrl({
+      provider: "zonaprop",
+      neighborhoods: ["nunez"],
+      minAmbientes: 3,
+      maxAmbientes: 2,
+    })).toThrow("Invalid range");
   });
 });
 

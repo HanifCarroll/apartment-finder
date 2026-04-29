@@ -44,13 +44,17 @@ function parseArgs(argv: string[]): SearchArgs {
     .option("--provider <provider>", "Build a search URL for: zonaprop, argenprop, or airbnb.")
     .option("--neighborhood <name>", `Neighborhood to search. Repeat or comma-separate. Supported: ${supportedNeighborhoods().join(", ")}.`, collectOption, [])
     .option("--neighborhoods <names>", "Comma-separated alias for --neighborhood.")
+    .option("--min-price <usd>", "Minimum monthly price in USD.")
     .option("--max-price <usd>", "Maximum monthly price in USD.")
     .option("--price <usd>", "Alias for --max-price.")
     .option("--ambientes <n>", "Number of ambientes for Zonaprop/Argenprop.")
+    .option("--min-ambientes <n>", "Minimum ambientes for Zonaprop/Argenprop.")
+    .option("--max-ambientes <n>", "Maximum ambientes for Zonaprop/Argenprop.")
     .option("--dormitorios <n>", "Number of dormitorios for Zonaprop/Argenprop.")
+    .option("--min-dormitorios <n>", "Minimum dormitorios for Zonaprop/Argenprop.")
+    .option("--max-dormitorios <n>", "Maximum dormitorios for Zonaprop/Argenprop.")
     .option("--check-in <date>", "Airbnb check-in date, YYYY-MM-DD.")
     .option("--check-out <date>", "Airbnb check-out date, YYYY-MM-DD.")
-    .option("--adults <n>", "Airbnb adults/guests count.", "1")
     .option("--out <path>", "Append full JSONL audit records.")
     .option("--max-listings <n>", "Maximum listing URLs to inspect.", "20")
     .option("--max-pages <n>", "Maximum search result pages to visit.", "5")
@@ -73,13 +77,17 @@ function parseArgs(argv: string[]): SearchArgs {
     provider?: SearchProvider;
     neighborhood?: string[];
     neighborhoods?: string;
+    minPrice?: string;
     maxPrice?: string;
     price?: string;
     ambientes?: string;
+    minAmbientes?: string;
+    maxAmbientes?: string;
     dormitorios?: string;
+    minDormitorios?: string;
+    maxDormitorios?: string;
     checkIn?: string;
     checkOut?: string;
-    adults: string;
     out?: string;
     maxListings: string;
     maxPages: string;
@@ -153,13 +161,17 @@ function buildUrlFromFilterOptions(options: {
   provider?: SearchProvider;
   neighborhood?: string[];
   neighborhoods?: string;
+  minPrice?: string;
   maxPrice?: string;
   price?: string;
   ambientes?: string;
+  minAmbientes?: string;
+  maxAmbientes?: string;
   dormitorios?: string;
+  minDormitorios?: string;
+  maxDormitorios?: string;
   checkIn?: string;
   checkOut?: string;
-  adults?: string;
 }) {
   if (!hasFilterOptions(options)) return undefined;
   if (!options.provider || !["zonaprop", "argenprop", "airbnb"].includes(options.provider)) {
@@ -172,12 +184,16 @@ function buildUrlFromFilterOptions(options: {
   return buildSearchUrl({
     provider: options.provider,
     neighborhoods,
+    minPriceUsd: parseOptionalPositiveInt(options.minPrice, "--min-price"),
     maxPriceUsd: parseOptionalPositiveInt(options.maxPrice || options.price, "--max-price"),
     ambientes: parseOptionalPositiveInt(options.ambientes, "--ambientes"),
+    minAmbientes: parseOptionalPositiveInt(options.minAmbientes, "--min-ambientes"),
+    maxAmbientes: parseOptionalPositiveInt(options.maxAmbientes, "--max-ambientes"),
     dormitorios: parseOptionalPositiveInt(options.dormitorios, "--dormitorios"),
+    minDormitorios: parseOptionalPositiveInt(options.minDormitorios, "--min-dormitorios"),
+    maxDormitorios: parseOptionalPositiveInt(options.maxDormitorios, "--max-dormitorios"),
     checkIn: options.checkIn,
     checkOut: options.checkOut,
-    adults: parseOptionalPositiveInt(options.adults, "--adults"),
   });
 }
 
@@ -185,10 +201,15 @@ function hasFilterOptions(options: {
   provider?: string;
   neighborhood?: string[];
   neighborhoods?: string;
+  minPrice?: string;
   maxPrice?: string;
   price?: string;
   ambientes?: string;
+  minAmbientes?: string;
+  maxAmbientes?: string;
   dormitorios?: string;
+  minDormitorios?: string;
+  maxDormitorios?: string;
   checkIn?: string;
   checkOut?: string;
 }): boolean {
@@ -196,10 +217,15 @@ function hasFilterOptions(options: {
     options.provider
       || options.neighborhood?.length
       || options.neighborhoods
+      || options.minPrice
       || options.maxPrice
       || options.price
       || options.ambientes
+      || options.minAmbientes
+      || options.maxAmbientes
       || options.dormitorios
+      || options.minDormitorios
+      || options.maxDormitorios
       || options.checkIn
       || options.checkOut,
   );

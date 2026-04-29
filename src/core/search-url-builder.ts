@@ -3,9 +3,14 @@ import type { SearchProvider } from "../providers/search";
 export type SearchFilters = {
   provider: SearchProvider;
   neighborhoods: string[];
+  minPriceUsd?: number;
   maxPriceUsd?: number;
   ambientes?: number;
+  minAmbientes?: number;
+  maxAmbientes?: number;
   dormitorios?: number;
+  minDormitorios?: number;
+  maxDormitorios?: number;
   checkIn?: string;
   checkOut?: string;
   adults?: number;
@@ -419,6 +424,8 @@ function normalizeNeighborhoodKey(value: string): string {
 }
 
 function buildZonapropUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): BuiltSearchUrl {
+  const ambientes = rangeFromExactOrBounds(filters.ambientes, filters.minAmbientes, filters.maxAmbientes);
+  const dormitorios = rangeFromExactOrBounds(filters.dormitorios, filters.minDormitorios, filters.maxDormitorios);
   const parts = [
     "inmuebles",
     "alquiler",
@@ -427,9 +434,9 @@ function buildZonapropUrl(filters: SearchFilters, neighborhoods: Neighborhood[])
     "con",
     "amoblado",
   ];
-  if (filters.ambientes) parts.push(String(filters.ambientes), "ambientes");
-  if (filters.dormitorios) parts.push(String(filters.dormitorios), "dormitorios");
-  if (filters.maxPriceUsd) parts.push("menos", String(filters.maxPriceUsd), "dolar");
+  parts.push(...zonapropRangeParts(ambientes, "ambientes"));
+  parts.push(...zonapropRangeParts(dormitorios, "habitaciones"));
+  parts.push(...zonapropPriceParts(filters.minPriceUsd, filters.maxPriceUsd));
 
   return {
     provider: "zonaprop",
@@ -440,14 +447,17 @@ function buildZonapropUrl(filters: SearchFilters, neighborhoods: Neighborhood[])
 }
 
 function buildArgenpropUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): BuiltSearchUrl {
+  const ambientes = rangeFromExactOrBounds(filters.ambientes, filters.minAmbientes, filters.maxAmbientes);
+  const dormitorios = rangeFromExactOrBounds(filters.dormitorios, filters.minDormitorios, filters.maxDormitorios);
   const pathParts = [
     "departamentos",
     "alquiler-temporal",
     neighborhoods.map((item) => item.argenprop).join("-o-"),
   ];
-  if (filters.ambientes) pathParts.push(`${filters.ambientes}-ambientes`);
-  if (filters.dormitorios) pathParts.push(`${filters.dormitorios}-dormitorios`);
-  if (filters.maxPriceUsd) pathParts.push(`dolares-hasta-${filters.maxPriceUsd}`);
+  pathParts.push(...argenpropRangePathParts(ambientes, "ambientes"));
+  pathParts.push(...argenpropRangePathParts(dormitorios, "dormitorios"));
+  const pricePath = argenpropPricePath(filters.minPriceUsd, filters.maxPriceUsd);
+  if (pricePath) pathParts.push(pricePath);
 
   return {
     provider: "argenprop",
@@ -457,11 +467,72 @@ function buildArgenpropUrl(filters: SearchFilters, neighborhoods: Neighborhood[]
   };
 }
 
+function rangeFromExactOrBounds(exact?: number, min?: number, max?: number): { min?: number; max?: number } {
+  const range = exact ? { min: exact, max: exact } : { min, max };
+  if (range.min && range.max && range.min > range.max) {
+    throw new Error(`Invalid range: min ${range.min} cannot be greater than max ${range.max}.`);
+  }
+  return range;
+}
+
+function zonapropPriceParts(min?: number, max?: number): string[] {
+  validateMinMax(min, max, "price");
+  if (min && max) return [String(min), String(max), "dolar"];
+  if (max) return ["menos", String(max), "dolar"];
+  if (min) return ["mas", "de", String(min), "dolar"];
+  return [];
+}
+
+function argenpropPricePath(min?: number, max?: number): string | undefined {
+  validateMinMax(min, max, "price");
+  if (min && max) return `dolares-${min}-${max}`;
+  if (max) return `dolares-hasta-${max}`;
+  if (min) return `dolares-desde-${min}`;
+  return undefined;
+}
+
+function validateMinMax(min: number | undefined, max: number | undefined, label: string): void {
+  if (min && max && min > max) {
+    throw new Error(`Invalid ${label} range: min ${min} cannot be greater than max ${max}.`);
+  }
+}
+
+function zonapropRangeParts(range: { min?: number; max?: number }, unit: "ambientes" | "habitaciones"): string[] {
+  if (range.min && range.max && range.min === range.max) return [String(range.min), unit];
+  if (range.min && range.max) {
+    if (range.min <= 1) return ["hasta", String(range.max), unit];
+    return ["mas", "de", String(range.min - 1), unit, "hasta", String(range.max), unit];
+  }
+  if (range.min) {
+    if (range.min <= 1) return [];
+    return ["mas", "de", String(range.min - 1), unit];
+  }
+  if (range.max) return ["hasta", String(range.max), unit];
+  return [];
+}
+
+function argenpropRangePathParts(range: { min?: number; max?: number }, unit: "ambientes" | "dormitorios"): string[] {
+  if (range.min && range.max && range.min === range.max) return [`${range.min}-${unit}`];
+  if (range.min && range.max) return [inclusiveRange(range.min, range.max).map((value) => `${value}-${unit}`).join("-o-")];
+  if (range.min) return [`${range.min}-${unit}`];
+  if (range.max) return [inclusiveRange(1, range.max).map((value) => `${value}-${unit}`).join("-o-")];
+  return [];
+}
+
+function inclusiveRange(min: number, max: number): number[] {
+  if (max < min) return [];
+  return Array.from({ length: max - min + 1 }, (_, index) => min + index);
+}
+
 function buildAirbnbUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): BuiltSearchUrl {
   const ignored: string[] = [];
   const warnings: string[] = [];
   if (filters.ambientes) ignored.push("ambientes");
+  if (filters.minAmbientes) ignored.push("minAmbientes");
+  if (filters.maxAmbientes) ignored.push("maxAmbientes");
   if (filters.dormitorios) ignored.push("dormitorios");
+  if (filters.minDormitorios) ignored.push("minDormitorios");
+  if (filters.maxDormitorios) ignored.push("maxDormitorios");
   if (!filters.checkIn || !filters.checkOut) {
     warnings.push("Airbnb searches work best with --check-in and --check-out; results and pricing may be incomplete.");
   }
@@ -481,6 +552,7 @@ function buildAirbnbUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): 
   url.searchParams.set("disable_auto_translation", "true");
   if (filters.checkIn) url.searchParams.set("checkin", filters.checkIn);
   if (filters.checkOut) url.searchParams.set("checkout", filters.checkOut);
+  if (filters.minPriceUsd) url.searchParams.set("price_min", String(filters.minPriceUsd));
   if (filters.maxPriceUsd) url.searchParams.set("price_max", String(filters.maxPriceUsd));
 
   return {

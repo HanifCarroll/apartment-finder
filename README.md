@@ -227,15 +227,17 @@ bun run find \
   --provider zonaprop \
   --neighborhood nunez,las-canitas \
   --max-price 1500 \
-  --ambientes 2
+  --min-ambientes 2 \
+  --max-ambientes 3
 ```
 
 Supported generated-filter fields:
 
 - `--provider zonaprop|argenprop|airbnb`
 - `--neighborhood <name>` or `--neighborhoods <comma-list>`
-- `--max-price <usd>` or `--price <usd>`
-- `--ambientes <n>` and `--dormitorios <n>` for Zonaprop/Argenprop
+- `--min-price <usd>`, `--max-price <usd>`, or `--price <usd>` as a max-price alias
+- `--ambientes <n>` or `--min-ambientes <n>` / `--max-ambientes <n>` for Zonaprop/Argenprop
+- `--dormitorios <n>` or `--min-dormitorios <n>` / `--max-dormitorios <n>` for Zonaprop/Argenprop
 - `--check-in YYYY-MM-DD` and `--check-out YYYY-MM-DD` for Airbnb
 
 Generated Zonaprop and Argenprop searches always include `amoblado`. Airbnb generated searches include `amenities[]=33` for washer, `room_types[]=Entire home/apt`, and ignore `ambientes`/`dormitorios` because Airbnb does not expose those filters in the same way.
