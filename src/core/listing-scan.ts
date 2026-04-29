@@ -6,7 +6,7 @@ import {
   formatListingScanLine,
   type ListingExtractionRecord,
   type ListingSummaryRecord,
-} from "./output";
+} from "../listing/output";
 import type { Args } from "../types";
 
 export type ListingScanOptions = {

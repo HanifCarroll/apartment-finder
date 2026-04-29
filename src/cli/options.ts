@@ -6,7 +6,7 @@ import {
   DEFAULT_MODEL,
 } from "./args";
 import { DEFAULT_CONCURRENCY } from "../lib/concurrency";
-import type { ListingScanOptions } from "../listing/scan-runner";
+import type { ListingScanOptions } from "../core";
 
 export type CommonScanCliOptions = ListingScanOptions & {
   outPath?: string;

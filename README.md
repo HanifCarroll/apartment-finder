@@ -312,8 +312,9 @@ After filling `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`, run `bun run s
 
 Source layout:
 
+- `src/core/` - framework-agnostic service API for building search URLs, scanning listings, and scanning search result pages
 - `src/providers/` - provider-specific extraction and search behavior
-- `src/listing/` - listing extraction, aggregation, output, and scan orchestration
+- `src/listing/` - listing extraction, aggregation, and output helpers
 - `src/browser/` - browser backend and Playwriter session helpers
 - `src/cli/` - CLI defaults and option parsing
 - `src/lib/` - generic filesystem, image, concurrency, and shell helpers

@@ -1,4 +1,4 @@
-import type { SearchProvider } from "./search";
+import type { SearchProvider } from "../providers/search";
 
 export type SearchFilters = {
   provider: SearchProvider;

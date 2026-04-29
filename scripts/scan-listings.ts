@@ -18,7 +18,7 @@ import {
   formatListingScanResult,
   listingScanHeader,
   scanListing,
-} from "../src/listing/scan-runner";
+} from "../src/core";
 
 type ScanArgs = CommonScanCliOptions & {
   inputPath?: string;

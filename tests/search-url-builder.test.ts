@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSearchUrl, parseNeighborhoodList } from "../src/providers/search-url-builder";
+import { buildSearchUrl, parseNeighborhoodList } from "../src/core";
 
 describe("parseNeighborhoodList", () => {
   it("supports repeated and comma-separated neighborhoods", () => {

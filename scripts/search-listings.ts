@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { appendJsonl } from "../src/lib/jsonl";
 import {
   DEFAULT_CACHE_DIR,
   DEFAULT_ESCALATION_MODEL,
@@ -14,19 +13,15 @@ import {
   type CommonScanCliOptions,
 } from "../src/cli/options";
 import {
-  appendFailedListingScan,
+  buildSearchUrl,
   formatListingScanResult,
   listingScanHeader,
-  scanListing,
-} from "../src/listing/scan-runner";
-import { findListingUrlsFromSearchUrl } from "../src/listing/search";
-import type { ListingSearchResult } from "../src/listing/search";
-import type { LocationLabel } from "../src/types";
-import {
-  buildSearchUrl,
   parseNeighborhoodList,
+  scanSearchUrl,
+  scanListing,
   supportedNeighborhoods,
-} from "../src/providers/search-url-builder";
+  type SearchScanRecord,
+} from "../src/core";
 import type { SearchProvider } from "../src/providers/search";
 
 type SearchArgs = CommonScanCliOptions & {
@@ -39,12 +34,6 @@ type SearchArgs = CommonScanCliOptions & {
   discoverOnly: boolean;
   format: "cards" | "table" | "json";
 };
-
-type SearchRecord = {
-  ok: true;
-  type: "listing_search";
-  created_at: string;
-} & ListingSearchResult;
 
 function parseArgs(argv: string[]): SearchArgs {
   const program = new Command()
@@ -225,10 +214,6 @@ function collectOption(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
-function shouldPrint(decision: LocationLabel | undefined, args: SearchArgs): boolean {
-  return args.includeAll || decision === "IN_UNIT";
-}
-
 function photoEvidence(summary: { evidence?: Array<{ listing_image_index?: number; confidence?: number; contains_washing_machine?: boolean }> }): string {
   const refs = (summary.evidence || [])
     .filter((item) => item.contains_washing_machine)
@@ -241,7 +226,7 @@ function bestUrl(summary: { evidence?: Array<{ image_url?: string }> }): string 
   return summary.evidence?.find((item) => item.image_url)?.image_url || "";
 }
 
-function printDiscovery(searchRecord: SearchRecord, args: SearchArgs): void {
+function printDiscovery(searchRecord: SearchScanRecord, args: SearchArgs): void {
   if (args.format === "json") {
     console.log(JSON.stringify(searchRecord, null, 2));
     return;
@@ -278,27 +263,26 @@ if (!args.discoverOnly && !process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY is required. Add it to .env as OPENAI_API_KEY=...");
 }
 
-const searchResult = await findListingUrlsFromSearchUrl(args.searchUrl, args.maxListings, args.maxPages);
-const searchRecord: SearchRecord = {
-  ok: true,
-  type: "listing_search",
-  created_at: new Date().toISOString(),
-  ...searchResult,
-};
-if (args.outPath) await appendJsonl(args.outPath, [searchRecord]);
+const result = await scanSearchUrl(
+  args.searchUrl,
+  args,
+  ({ index, total, listingUrl }) => {
+    console.error(`Scanning ${index + 1}/${total}: ${listingUrl}`);
+  },
+);
 
-for (const warning of searchResult.warnings) {
+for (const warning of result.search.warnings) {
   console.error(`warning: ${warning}`);
 }
 for (const warning of args.builtSearchWarnings) {
   console.error(`warning: ${warning}`);
 }
 for (const ignored of args.builtSearchIgnored) {
-  console.error(`warning: ${ignored} is ignored for ${searchResult.provider} generated search URLs.`);
+  console.error(`warning: ${ignored} is ignored for ${result.search.provider} generated search URLs.`);
 }
 
 if (args.discoverOnly) {
-  printDiscovery(searchRecord, args);
+  printDiscovery(result.search, args);
   process.exit(0);
 }
 
@@ -306,38 +290,19 @@ if (args.format === "table") {
   console.log(listingScanHeader());
 }
 
-let matchCount = 0;
-let printedCount = 0;
-let failedCount = 0;
-for (let index = 0; index < searchResult.listing_urls.length; index += 1) {
-  const listingUrl = searchResult.listing_urls[index];
-  console.error(`Scanning ${index + 1}/${searchResult.listing_urls.length}: ${listingUrl}`);
-
-  try {
-    const { summary, extraction } = await scanListing(listingUrl, args, args.outPath);
-    if (shouldPrint(summary.decision, args)) {
-      matchCount += summary.decision === "IN_UNIT" ? 1 : 0;
-      printedCount += 1;
-      if (args.format === "cards") {
-        console.log(formatCard(printedCount, summary, extraction));
-        console.log("");
-      } else {
-        console.log(formatListingScanResult(summary, extraction, args.jsonOutput));
-      }
-    }
-  } catch (error) {
-    failedCount += 1;
-    const failed = await appendFailedListingScan(listingUrl, error, args.outPath);
-    if (args.includeAll) {
-      printedCount += 1;
-      if (args.format === "cards") {
-        console.log(formatCard(printedCount, failed, undefined));
-        console.log("");
-      } else {
-        console.log(formatListingScanResult(failed, undefined, args.jsonOutput));
-      }
-    }
+let printedIndex = 0;
+for (const item of result.items) {
+  if (!item.printed) continue;
+  printedIndex += 1;
+  const summary = item.result?.summary || item.failure;
+  const extraction = item.result?.extraction;
+  if (!summary) continue;
+  if (args.format === "cards") {
+    console.log(formatCard(printedIndex, summary, extraction));
+    console.log("");
+  } else {
+    console.log(formatListingScanResult(summary, extraction, args.jsonOutput));
   }
 }
 
-console.error(`Done: ${matchCount} IN_UNIT match(es), ${failedCount} failed, ${searchResult.listing_urls.length} scanned.`);
+console.error(`Done: ${result.matchCount} IN_UNIT match(es), ${result.failedCount} failed, ${result.search.listing_urls.length} scanned.`);

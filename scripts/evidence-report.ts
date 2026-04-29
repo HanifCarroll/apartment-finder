@@ -16,7 +16,7 @@ import {
   type ListingExtractionRecord,
   type ListingSummaryRecord,
 } from "../src/listing/output";
-import { scanListing } from "../src/listing/scan-runner";
+import { scanListing } from "../src/core";
 
 type ReportArgs = CommonScanCliOptions & {
   listingUrl: string;
