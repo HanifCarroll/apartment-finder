@@ -3,5 +3,7 @@
 !.env.example
 .DS_Store
 node_modules
+dist
+.output
 .apartment-laundry-cache
 results

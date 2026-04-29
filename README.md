@@ -252,6 +252,16 @@ When you pass a raw URL, that provider URL remains the source of truth for filte
 
 Search audit records include `page_urls`, so you can confirm which result pages were visited.
 
+## Web UI
+
+The TanStack Start UI wraps the same `src/core` services used by the CLI. It supports provider filters, raw search URLs, discover-only runs, and full model-backed scans.
+
+```sh
+bun run dev
+```
+
+Open `http://localhost:3000`. Discovery runs do not require `OPENAI_API_KEY`; full scans do.
+
 Useful flags:
 
 ```sh
@@ -313,6 +323,8 @@ After filling `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`, run `bun run s
 Source layout:
 
 - `src/core/` - framework-agnostic service API for building search URLs, scanning listings, and scanning search result pages
+- `src/routes/` and `src/web/` - TanStack Start routes and server functions
+- `src/components/` - local shadcn-style UI components
 - `src/providers/` - provider-specific extraction and search behavior
 - `src/listing/` - listing extraction, aggregation, and output helpers
 - `src/browser/` - browser backend and Playwriter session helpers
