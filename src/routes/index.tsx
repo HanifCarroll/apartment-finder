@@ -7,9 +7,11 @@ import {
   Building2,
   CheckCircle2,
   Loader2,
+  Plus,
   Search,
   Settings2,
   WashingMachine,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +44,6 @@ type FormState = {
   dormitorios: string;
   checkIn: string;
   checkOut: string;
-  adults: string;
   discoverOnly: boolean;
   includeAll: boolean;
   maxListings: string;
@@ -62,7 +63,6 @@ const defaultForm: FormState = {
   dormitorios: "",
   checkIn: "2026-06-14",
   checkOut: "2026-08-23",
-  adults: "1",
   discoverOnly: true,
   includeAll: false,
   maxListings: "20",
@@ -234,7 +234,7 @@ function FilterFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
-  const neighborhoodGroups = React.useMemo(() => groupNeighborhoods(supportedNeighborhoodOptions()), []);
+  const neighborhoodOptions = React.useMemo(() => supportedNeighborhoodOptions(), []);
 
   return (
     <div className="space-y-4">
@@ -251,39 +251,13 @@ function FilterFields({
         </select>
       </Field>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <Label>Neighborhoods</Label>
-          <Badge variant="outline">{form.neighborhoods.length} selected</Badge>
-        </div>
-        <div className="max-h-72 overflow-auto rounded-md border bg-card p-3">
-          <div className="space-y-4">
-            {neighborhoodGroups.map(([group, neighborhoods]) => (
-              <div key={group} className="space-y-2">
-                <div className="text-xs font-medium uppercase text-muted-foreground">{group}</div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {neighborhoods.map((neighborhood) => (
-                    <NeighborhoodCheckbox
-                      key={neighborhood.key}
-                      neighborhood={neighborhood}
-                      checked={form.neighborhoods.includes(neighborhood.key)}
-                      onChange={(checked) => {
-                        updateForm(setForm, {
-                          neighborhoods: checked
-                            ? [...form.neighborhoods, neighborhood.key]
-                            : form.neighborhoods.filter((key) => key !== neighborhood.key),
-                        });
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <NeighborhoodTypeahead
+        options={neighborhoodOptions}
+        selectedKeys={form.neighborhoods}
+        onChange={(neighborhoods) => updateForm(setForm, { neighborhoods })}
+      />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3">
         <Field label="Max USD" htmlFor="maxPriceUsd">
           <Input
             id="maxPriceUsd"
@@ -291,15 +265,6 @@ function FilterFields({
             min="1"
             value={form.maxPriceUsd}
             onChange={(event) => updateForm(setForm, { maxPriceUsd: event.target.value })}
-          />
-        </Field>
-        <Field label="Adults" htmlFor="adults">
-          <Input
-            id="adults"
-            type="number"
-            min="1"
-            value={form.adults}
-            onChange={(event) => updateForm(setForm, { adults: event.target.value })}
           />
         </Field>
       </div>
@@ -524,22 +489,96 @@ function ToggleRow({
   );
 }
 
-function NeighborhoodCheckbox({
-  neighborhood,
-  checked,
+function NeighborhoodTypeahead({
+  options,
+  selectedKeys,
   onChange,
 }: {
-  neighborhood: SupportedNeighborhood;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
+  options: SupportedNeighborhood[];
+  selectedKeys: string[];
+  onChange: (selectedKeys: string[]) => void;
 }) {
-  const id = `neighborhood-${neighborhood.key}`;
+  const [query, setQuery] = React.useState("");
+  const selected = selectedKeys
+    .map((key) => options.find((option) => option.key === key))
+    .filter((option): option is SupportedNeighborhood => Boolean(option));
+  const filtered = options
+    .filter((option) => !selectedKeys.includes(option.key))
+    .filter((option) => matchesNeighborhood(option, query))
+    .slice(0, 8);
+
+  function addNeighborhood(key: string) {
+    onChange([...selectedKeys, key]);
+    setQuery("");
+  }
+
+  function removeNeighborhood(key: string) {
+    onChange(selectedKeys.filter((selectedKey) => selectedKey !== key));
+  }
+
   return (
-    <div className="flex min-h-9 items-center gap-3 rounded-md px-2 hover:bg-muted">
-      <Checkbox id={id} checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <Label htmlFor={id} className="flex-1 cursor-pointer text-sm font-normal">
-        {neighborhood.label}
-      </Label>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="neighborhood-typeahead">Neighborhoods</Label>
+        <Badge variant="outline">{selectedKeys.length} selected</Badge>
+      </div>
+
+      <div className="rounded-md border bg-card p-2">
+        <div className="flex min-h-10 flex-wrap items-center gap-2">
+          {selected.map((neighborhood) => (
+            <Badge key={neighborhood.key} variant="secondary" className="gap-1.5 py-1">
+              {neighborhood.label}
+              <button
+                type="button"
+                className="rounded-sm outline-none hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Remove ${neighborhood.label}`}
+                onClick={() => removeNeighborhood(neighborhood.key)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+          <input
+            id="neighborhood-typeahead"
+            value={query}
+            placeholder={selected.length ? "Add another..." : "Type a neighborhood..."}
+            className="min-w-40 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && filtered[0]) {
+                event.preventDefault();
+                addNeighborhood(filtered[0].key);
+              }
+              if (event.key === "Backspace" && query === "" && selectedKeys.length > 0) {
+                removeNeighborhood(selectedKeys[selectedKeys.length - 1]);
+              }
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="max-h-64 overflow-auto rounded-md border bg-card p-1">
+        {filtered.length ? (
+          filtered.map((neighborhood) => (
+            <button
+              key={neighborhood.key}
+              type="button"
+              className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => addNeighborhood(neighborhood.key)}
+            >
+              <span>
+                <span className="font-medium">{neighborhood.label}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{neighborhood.group}</span>
+              </span>
+              <Plus className="h-4 w-4 text-muted-foreground" />
+            </button>
+          ))
+        ) : (
+          <div className="px-3 py-4 text-sm text-muted-foreground">
+            {query ? "No matching neighborhoods" : "All listed neighborhoods are selected"}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -565,15 +604,21 @@ function ModeButton({
   );
 }
 
-function groupNeighborhoods(options: SupportedNeighborhood[]): Array<[string, SupportedNeighborhood[]]> {
-  const groups = new Map<string, SupportedNeighborhood[]>();
-  for (const option of options) {
-    const items = groups.get(option.group) || [];
-    items.push(option);
-    groups.set(option.group, items);
-  }
-  const order = ["North corridor", "Central", "West", "South", "Other CABA"];
-  return Array.from(groups.entries()).sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+function matchesNeighborhood(option: SupportedNeighborhood, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  return [
+    option.label,
+    option.key,
+    option.group,
+  ].some((value) => normalizeSearchText(value).includes(normalizedQuery));
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -625,7 +670,6 @@ function toSearchPayload(form: FormState) {
     dormitorios: optionalNumber(form.dormitorios),
     checkIn: form.checkIn || undefined,
     checkOut: form.checkOut || undefined,
-    adults: optionalNumber(form.adults) ?? 1,
     discoverOnly: form.discoverOnly,
     includeAll: form.includeAll,
     maxListings: optionalNumber(form.maxListings) ?? 20,

@@ -19,7 +19,6 @@ const SearchRequestSchema = z.object({
   dormitorios: z.coerce.number().int().positive().optional(),
   checkIn: z.string().trim().optional(),
   checkOut: z.string().trim().optional(),
-  adults: z.coerce.number().int().positive().default(1),
   discoverOnly: z.boolean().default(true),
   includeAll: z.boolean().default(false),
   maxListings: z.coerce.number().int().positive().max(100).default(20),
@@ -87,7 +86,6 @@ export const runSearch = createServerFn({ method: "POST" })
         dormitorios: data.dormitorios,
         checkIn: data.checkIn,
         checkOut: data.checkOut,
-        adults: data.adults,
       });
       searchUrl = built.url;
       warnings.push(...built.warnings);
