@@ -17,7 +17,9 @@ Important: contains_washing_machine means any washing machine is visible in the 
 
 If a shared laundry room or amenity laundry area shows laundry machines, set contains_washing_machine true and location_label SHARED_BUILDING. Shared-building cues include multiple machines, stacked machines, numbered machines, payment or control panels, posted instructions or wall signs, folding tables, utility sinks in a public room, amenity-room context, and service-room layouts.
 
-Be conservative about IN_UNIT. If a photo only shows a washer close-up with no room context, use UNKNOWN unless there are clear private-unit or shared-laundry signals. Do not count a dishwasher, dryer-only machine, sink, boiler, refrigerator, or laundry basket as a washing machine. Keep confidence between 0 and 1.`;
+Do not count wall-mounted boilers, water heaters, calefones, termotanques, dishwashers, refrigerators, sinks, dryer-only machines, laundry baskets, or utility boxes as washing machines. A washing machine should show washer-specific cues like a round front-loading door or drum, top-loading lid, detergent drawer, washer control panel, or laundry appliance body at floor/counter height. A white wall-mounted appliance above a counter or sink is usually a boiler/water heater, not a washer.
+
+Be conservative about IN_UNIT. If a photo only shows a washer close-up with no room context, use UNKNOWN unless there are clear private-unit or shared-laundry signals. Keep confidence between 0 and 1.`;
 }
 
 function readRateLimitHeaders(response: Response): Record<string, string> {

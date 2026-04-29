@@ -5,6 +5,7 @@ export type ClassificationRecordLike = {
   listing_image_index?: number;
   image?: { source?: string };
   model?: string;
+  pass?: string;
   verdict?: Verdict;
 };
 
@@ -33,8 +34,22 @@ const labelOrder: Record<LocationLabel, number> = {
   UNKNOWN: 3,
 };
 
+function imageEvidenceKey(record: ClassificationRecordLike): string {
+  return record.image?.source || String(record.listing_image_index ?? "");
+}
+
+function preferEscalationRecords(records: ClassificationRecordLike[]): ClassificationRecordLike[] {
+  const escalatedKeys = new Set(
+    records
+      .filter((record) => record.ok && record.pass === "escalation" && record.verdict)
+      .map(imageEvidenceKey),
+  );
+  if (escalatedKeys.size === 0) return records;
+  return records.filter((record) => record.pass === "escalation" || !escalatedKeys.has(imageEvidenceKey(record)));
+}
+
 export function buildEvidence(records: ClassificationRecordLike[]): ListingEvidence[] {
-  return records
+  return preferEscalationRecords(records)
     .filter((record) => record.ok && record.verdict?.contains_washing_machine)
     .map((record) => ({
       listing_image_index: record.listing_image_index,

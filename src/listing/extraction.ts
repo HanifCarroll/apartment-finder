@@ -61,6 +61,10 @@ function limitExtractionImages(extraction: ListingExtraction, maxImages: number)
   };
 }
 
+function hasListingText(extraction: ListingExtraction): boolean {
+  return Boolean(extraction.listing_title?.trim() || extraction.listing_description?.trim());
+}
+
 export async function extractListingImageUrls(
   listingUrl: string,
   args: Pick<
@@ -72,7 +76,7 @@ export async function extractListingImageUrls(
     ? await readCachedListingExtraction(args.extractionCachePath, listingUrl)
     : null;
 
-  if (cached && !args.refreshExtraction) {
+  if (cached && !args.refreshExtraction && hasListingText(cached)) {
     return withExtractionMetadata(limitExtractionImages(cached, args.maxImages), {
       extraction_source: "cache",
       extraction_attempts: 0,

@@ -5,7 +5,8 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   AlertCircle,
   Building2,
-  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Loader2,
   Plus,
@@ -17,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -25,7 +25,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { runSearch, type SearchUiResult } from "@/web/search.functions";
-import { DEFAULT_ESCALATION_MODEL, DEFAULT_MAX_IMAGES, DEFAULT_MODEL } from "@/cli/args";
 import { supportedNeighborhoodOptions, type SupportedNeighborhood } from "@/core/search-url-builder";
 
 export const Route = createFileRoute("/")({
@@ -60,9 +59,6 @@ type FormState = {
   checkOut: string;
   maxListings: string;
   maxPages: string;
-  maxImages: string;
-  model: string;
-  escalationModel: string;
 };
 
 const defaultForm: FormState = {
@@ -80,15 +76,21 @@ const defaultForm: FormState = {
   checkOut: "2026-08-23",
   maxListings: "20",
   maxPages: "3",
-  maxImages: String(DEFAULT_MAX_IMAGES),
-  model: DEFAULT_MODEL,
-  escalationModel: DEFAULT_ESCALATION_MODEL,
 };
+
+const LOADING_STAGES = [
+  "Preparing the search",
+  "Finding result pages",
+  "Extracting listing photos and descriptions",
+  "Classifying washer evidence",
+  "Ranking and filtering results",
+];
 
 function HomePage() {
   const runSearchFn = useServerFn(runSearch);
   const [form, setForm] = React.useState<FormState>(defaultForm);
   const [resultFilter, setResultFilter] = React.useState<ResultFilter>("ALL");
+  const [lightbox, setLightbox] = React.useState<{ images: string[]; index: number; title: string } | null>(null);
 
   const searchMutation = useMutation({
     mutationKey: ["search-scan", form.mode, form.provider],
@@ -96,6 +98,7 @@ function HomePage() {
   });
 
   const result = searchMutation.data;
+  const loadingStage = useLoadingStage(searchMutation.isPending);
 
   return (
     <main className="h-screen overflow-hidden bg-background">
@@ -166,35 +169,6 @@ function HomePage() {
                       />
                     </Field>
                   </div>
-
-                  <details className="rounded-md border p-3">
-                    <summary className="cursor-pointer text-sm font-medium">Advanced scan settings</summary>
-                    <div className="mt-3 grid gap-2">
-                      <Field label="First-pass model" htmlFor="model">
-                        <Input
-                          id="model"
-                          value={form.model}
-                          onChange={(event) => updateForm(setForm, { model: event.target.value })}
-                        />
-                      </Field>
-                      <Field label="Escalation model" htmlFor="escalationModel">
-                        <Input
-                          id="escalationModel"
-                          value={form.escalationModel}
-                          onChange={(event) => updateForm(setForm, { escalationModel: event.target.value })}
-                        />
-                      </Field>
-                      <Field label="Max photos per listing" htmlFor="maxImages">
-                        <Input
-                          id="maxImages"
-                          type="number"
-                          min="1"
-                          value={form.maxImages}
-                          onChange={(event) => updateForm(setForm, { maxImages: event.target.value })}
-                        />
-                      </Field>
-                    </div>
-                  </details>
                 </div>
 
                 <div className="sticky bottom-0 mt-auto border-t bg-card pt-3">
@@ -232,14 +206,25 @@ function HomePage() {
                   result={result}
                   error={searchMutation.error}
                   pending={searchMutation.isPending}
+                  loadingStage={loadingStage}
                   filter={resultFilter}
                   onFilterChange={setResultFilter}
+                  onOpenLightbox={(images, index, title) => setLightbox({ images, index, title })}
                 />
               </div>
             </div>
           </section>
         </div>
       </div>
+      {lightbox ? (
+        <ImageLightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          title={lightbox.title}
+          onChangeIndex={(index) => setLightbox((current) => current ? { ...current, index } : current)}
+          onClose={() => setLightbox(null)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -374,21 +359,25 @@ function ResultsPanel({
   result,
   error,
   pending,
+  loadingStage,
   filter,
   onFilterChange,
+  onOpenLightbox,
 }: {
   result?: SearchUiResult;
   error: Error | null;
   pending: boolean;
+  loadingStage: { index: number; total: number; label: string };
   filter: ResultFilter;
   onFilterChange: (filter: ResultFilter) => void;
+  onOpenLightbox: (images: string[], index: number, title: string) => void;
 }) {
   if (pending) {
     return (
       <StateCard
         icon={<Loader2 className="h-5 w-5 animate-spin" />}
-        title="Working"
-        text="The server is extracting result pages and listing evidence."
+        title={`Stage ${loadingStage.index + 1}/${loadingStage.total}`}
+        text={loadingStage.label}
       />
     );
   }
@@ -418,10 +407,6 @@ function ResultsPanel({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <Badge variant="secondary" className="gap-1.5">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Scan complete
-        </Badge>
         <ResultFilterTabs result={result} value={filter} onChange={onFilterChange} />
         {result.warnings.map((warning) => (
           <Badge key={warning} variant="outline" className="max-w-full truncate text-muted-foreground">
@@ -438,7 +423,12 @@ function ResultsPanel({
       <div className="space-y-3">
         {filteredItems.length ? (
           filteredItems.map((item, index) => (
-            <ListingResult key={item.listingUrl} item={item} index={index + 1} />
+            <ListingResult
+              key={item.listingUrl}
+              item={item}
+              index={index + 1}
+              onOpenLightbox={onOpenLightbox}
+            />
           ))
         ) : (
           <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
@@ -506,7 +496,15 @@ function SummaryPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ListingResult({ item, index }: { item: SearchUiResult["items"][number]; index: number }) {
+function ListingResult({
+  item,
+  index,
+  onOpenLightbox,
+}: {
+  item: SearchUiResult["items"][number];
+  index: number;
+  onOpenLightbox: (images: string[], index: number, title: string) => void;
+}) {
   const [expanded, setExpanded] = React.useState(false);
   const listing = describeListingUrl(item.listingUrl, item.title);
   const decision = item.failed ? "FAILED" : item.decision || "UNKNOWN";
@@ -584,18 +582,18 @@ function ListingResult({ item, index }: { item: SearchUiResult["items"][number];
               <div className="text-xs font-medium uppercase text-muted-foreground">Listing Photos</div>
               <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-6">
                 {item.imageUrls.map((url, photoIndex) => (
-                  <a
+                  <button
                     key={`${item.listingUrl}-${url}`}
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
+                    type="button"
+                    aria-label={`Open photo ${photoIndex + 1}`}
+                    onClick={() => onOpenLightbox(item.imageUrls, photoIndex, listing.title)}
                     className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
                   >
                     <img src={url} alt={`${listing.title} photo ${photoIndex + 1}`} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
                     <span className="absolute left-1 top-1 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
                       {photoIndex + 1}
                     </span>
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>
@@ -627,6 +625,146 @@ function countResultFilters(items: SearchUiResult["items"]): Record<ResultFilter
   }
   return counts;
 }
+
+function useLoadingStage(active: boolean): { index: number; total: number; label: string } {
+  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!active) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [active]);
+
+  const index = elapsedSeconds < 2
+    ? 0
+    : elapsedSeconds < 6
+      ? 1
+      : elapsedSeconds < 14
+        ? 2
+        : elapsedSeconds < 28
+          ? 3
+          : 4;
+
+  return {
+    index,
+    total: LOADING_STAGES.length,
+    label: LOADING_STAGES[index],
+  };
+}
+
+function ImageLightbox({
+  images,
+  index,
+  title,
+  onChangeIndex,
+  onClose,
+}: {
+  images: string[];
+  index: number;
+  title: string;
+  onChangeIndex: (index: number) => void;
+  onClose: () => void;
+}) {
+  const activeIndex = Math.min(Math.max(index, 0), images.length - 1);
+  const activeImage = images[activeIndex];
+
+  const goTo = React.useCallback((nextIndex: number) => {
+    if (images.length === 0) return;
+    onChangeIndex((nextIndex + images.length) % images.length);
+  }, [images.length, onChangeIndex]);
+
+  React.useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft") goTo(activeIndex - 1);
+      if (event.key === "ArrowRight") goTo(activeIndex + 1);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeIndex, goTo, onClose]);
+
+  if (!activeImage) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/90 p-3 text-white"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} photo viewer`}
+      onClick={onClose}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 pb-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{title}</div>
+          <div className="text-xs text-white/70">Photo {activeIndex + 1} of {images.length}</div>
+        </div>
+        <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="relative min-h-0 flex-1" onClick={(event) => event.stopPropagation()}>
+        <img
+          src={activeImage}
+          alt={`${title} photo ${activeIndex + 1}`}
+          className="h-full w-full object-contain"
+        />
+        {images.length > 1 ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="absolute left-3 top-1/2 -translate-y-1/2"
+              aria-label="Previous photo"
+              onClick={() => goTo(activeIndex - 1)}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+              aria-label="Next photo"
+              onClick={() => goTo(activeIndex + 1)}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </>
+        ) : null}
+      </div>
+
+      {images.length > 1 ? (
+        <div className="mt-3 flex shrink-0 gap-2 overflow-x-auto pb-1" onClick={(event) => event.stopPropagation()}>
+          {images.map((url, photoIndex) => (
+            <button
+              key={`${url}-${photoIndex}`}
+              type="button"
+              className={[
+                "h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-white/10",
+                photoIndex === activeIndex ? "border-white" : "border-white/20 opacity-70 hover:opacity-100",
+              ].join(" ")}
+              aria-label={`Show photo ${photoIndex + 1}`}
+              onClick={() => onChangeIndex(photoIndex)}
+            >
+              <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Field({
   label,
   htmlFor,
@@ -897,9 +1035,6 @@ function toSearchPayload(form: FormState) {
     checkOut: form.checkOut || undefined,
     maxListings: optionalNumber(form.maxListings) ?? 20,
     maxPages: optionalNumber(form.maxPages) ?? 3,
-    maxImages: optionalNumber(form.maxImages) ?? DEFAULT_MAX_IMAGES,
-    model: form.model || DEFAULT_MODEL,
-    escalationModel: form.escalationModel || DEFAULT_ESCALATION_MODEL,
   };
 }
 

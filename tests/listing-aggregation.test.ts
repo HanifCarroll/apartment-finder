@@ -11,11 +11,14 @@ function record(
   locationLabel: "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN" | "CONFLICTING",
   confidence: number,
   washingMachineVisibility: "clear" | "partial" | "none" | "unsure" = "clear",
+  options: { pass?: string; imageIndex?: number; source?: string } = {},
 ): ClassificationRecordLike {
   return {
     ok: true,
     model: "gpt-5.4-mini",
-    image: { source: `https://example.com/${locationLabel}-${confidence}.jpg` },
+    pass: options.pass,
+    listing_image_index: options.imageIndex,
+    image: { source: options.source || `https://example.com/${locationLabel}-${confidence}.jpg` },
     verdict: {
       contains_washing_machine: locationLabel !== "UNKNOWN",
       washing_machine_visibility: washingMachineVisibility,
@@ -74,5 +77,16 @@ describe("aggregateByPolicy", () => {
 
     expect(aggregate.predictedLocation).toBe("UNKNOWN");
     expect(listingConfidence(aggregate)).toBe("medium");
+  });
+
+  it("lets an escalation verdict replace first-pass washer evidence for the same image", () => {
+    const source = "https://example.com/kitchen-wall-boiler.jpg";
+    const aggregate = aggregateByPolicy("shared-overrides-in-unit", [
+      record("IN_UNIT", 0.96, "clear", { imageIndex: 8, source }),
+      record("UNKNOWN", 0.95, "none", { pass: "escalation", imageIndex: 8, source }),
+    ]);
+
+    expect(aggregate.predictedLocation).toBe("UNKNOWN");
+    expect(aggregate.evidence).toHaveLength(0);
   });
 });
