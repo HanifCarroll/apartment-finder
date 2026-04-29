@@ -30,6 +30,10 @@ type RunArgs = {
   refreshExtraction: boolean;
 };
 
+function useBroadEscalationGate(): boolean {
+  return process.env.APARTMENT_FINDER_ESCALATION_GATE === "broad";
+}
+
 class UsageExit extends Error {
   constructor(public readonly exitCode: number) {
     super("usage");
@@ -211,6 +215,7 @@ function isEscalationCandidate(record: ClassificationRecordLike, _firstPassAggre
   const looksLikeBoilerConfusion = /\b(boiler|water heater|calef[oó]n|termotanque|wall[- ]mounted|above (?:a )?(?:counter|sink)|kitchen appliance)\b/.test(verdictText);
   const mentionsLaundryEvidence = /\b(washer|washing machine|laundry|laundromat|laundry room|lavarropas|lavasecarropas|lavadero|lavander[ií]a|shared laundry)\b/.test(verdictText);
 
+  if (useBroadEscalationGate() && _firstPassAggregateLocation === "UNKNOWN") return true;
   if (verdict.location_label === "CONFLICTING") return true;
   if (verdict.contains_washing_machine) return true;
   if (mentionsLaundryEvidence) return true;

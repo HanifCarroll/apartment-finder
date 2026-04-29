@@ -43,27 +43,47 @@ export async function classifyWithModel(
   latency_ms: number;
 }> {
   const startedAt = performance.now();
-  const { data, response } = await withGlobalModelCallSlot(() =>
-    client.responses.parse({
-      model,
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: classificationPrompt() },
-            {
-              type: "input_image",
-              image_url: image.dataUrl,
-              detail,
-            },
-          ],
+  let data: {
+    output_parsed: Verdict | null;
+    usage?: { total_tokens?: number } | null;
+  } | undefined;
+  let response: Response | undefined;
+  try {
+    const result = await withGlobalModelCallSlot(() =>
+      client.responses.parse({
+        model,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: classificationPrompt() },
+              {
+                type: "input_image",
+                image_url: image.dataUrl,
+                detail,
+              },
+            ],
+          },
+        ],
+        text: {
+          format: zodTextFormat(VerdictSchema, "washing_machine_location_verdict"),
         },
-      ],
-      text: {
-        format: zodTextFormat(VerdictSchema, "washing_machine_location_verdict"),
-      },
-    }).withResponse(),
-  );
+      }).withResponse(),
+    );
+    data = result.data;
+    response = result.response;
+  } catch (error) {
+    logger.warn({
+      event: "model_call_failed",
+      model,
+      imageSource: image.source,
+      latencyMs: Math.round(performance.now() - startedAt),
+      status: typeof error === "object" && error !== null && "status" in error ? (error as { status?: unknown }).status : undefined,
+      code: typeof error === "object" && error !== null && "code" in error ? (error as { code?: unknown }).code : undefined,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 
   const latency_ms = Math.round(performance.now() - startedAt);
   const verdict = data.output_parsed;
@@ -78,8 +98,12 @@ export async function classifyWithModel(
     imageSource: image.source,
     latencyMs: latency_ms,
     totalTokens: data.usage?.total_tokens,
+    limitRequests: rate_limits["x-ratelimit-limit-requests"],
+    limitTokens: rate_limits["x-ratelimit-limit-tokens"],
     remainingRequests: rate_limits["x-ratelimit-remaining-requests"],
     remainingTokens: rate_limits["x-ratelimit-remaining-tokens"],
+    resetRequests: rate_limits["x-ratelimit-reset-requests"],
+    resetTokens: rate_limits["x-ratelimit-reset-tokens"],
   });
 
   return {

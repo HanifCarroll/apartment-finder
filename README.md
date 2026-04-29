@@ -264,7 +264,7 @@ bun run dev
 
 Open `http://localhost:3000`. Web scans require `OPENAI_API_KEY`.
 
-The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=6` model calls and `LISTING_SCAN_CONCURRENCY=6` listing scans. OpenAI rate limits are account, project, and model specific, so override those env vars if the response headers show more or less capacity.
+The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=10` model calls and `LISTING_SCAN_CONCURRENCY=10` listing scans. This is chosen from observed response headers for the current key: requests are not the bottleneck, while `gpt-5.4-mini` token throughput is about 200k TPM and image calls are roughly 3.6k tokens each. OpenAI rate limits are account, project, and model specific, so override those env vars if `logs/app.log` shows different `limitTokens`/`remainingTokens` headroom.
 
 Backend scan logs are written to `logs/app.log` by default. The log is JSONL and includes search discovery, extraction/cache, listing, batch, image-load, first-pass model, escalation, and summary timing events. Override with `APP_LOG_PATH=/path/to/app.log`.
 
@@ -286,7 +286,7 @@ Image labels live in `fixtures/images.jsonl`.
 ```sh
 bun run eval:fixtures \
   --models gpt-5.4-mini,gpt-5.4-nano \
-  --concurrency 6 \
+  --concurrency 10 \
   --out results/eval-fixtures.jsonl \
   --summary results/eval-fixtures-summary.json
 ```
@@ -300,8 +300,8 @@ bun run summary:listings \
   --model gpt-5.4-mini \
   --escalation-model gpt-5.4 \
   --max-images 35 \
-  --concurrency 6 \
-  --listing-concurrency 6
+  --concurrency 10 \
+  --listing-concurrency 10
 
 bun run eval:listing-summaries \
   --listings fixtures/listings.jsonl \
@@ -313,6 +313,8 @@ bun run eval:listing-summaries \
 Current best benchmark on the original 40 labeled Zonaprop listings was the two-pass summary workflow with `gpt-5.4-mini` plus `gpt-5.4` escalation: `39/40` overall, `10/10` in-unit, `16/17` shared-building, and `13/13` unknown.
 
 Listing summary evals report accuracy by expected class and by `decision_source`, so Airbnb metadata overrides can be tracked separately from vision-only decisions.
+
+For regression comparisons only, set `APARTMENT_FINDER_ESCALATION_GATE=broad` to reproduce the older broad second-pass behavior. Leave it unset for the product default candidate gate.
 
 ## Development
 
