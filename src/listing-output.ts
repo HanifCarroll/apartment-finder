@@ -1,4 +1,5 @@
 import type { LocationLabel } from "./types";
+import type { LaundryMetadataSignal } from "./types";
 
 export type ListingSummaryRecord = {
   ok?: boolean;
@@ -11,6 +12,7 @@ export type ListingSummaryRecord = {
   vision_confidence?: string;
   airbnb_laundry_amenity_label?: string;
   airbnb_laundry_amenity_text?: string;
+  metadata_laundry_signals?: LaundryMetadataSignal[];
   policy?: string;
   image_count?: number;
   evidence?: Array<{
@@ -37,6 +39,10 @@ export type ListingExtractionRecord = {
   extraction_source?: string;
   airbnb_laundry_amenity_label?: string;
   airbnb_laundry_amenity_text?: string;
+  metadata_title?: string;
+  metadata_description?: string;
+  metadata_amenities?: string[];
+  metadata_laundry_signals?: LaundryMetadataSignal[];
 };
 
 export function findListingSummaryRecord(records: unknown[]): ListingSummaryRecord | undefined {

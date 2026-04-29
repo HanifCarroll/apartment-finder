@@ -49,6 +49,58 @@ function photoId(url) {
   return normalizeImageUrl(url).match(/\\/([^/?#]+)\\.(?:jpe?g|webp|png)$/i)?.[1] || normalizeImageUrl(url);
 }
 
+function cleanText(text) {
+  return String(text || '').replace(/[–—]/g, '-').replace(/\\s+/g, ' ').trim();
+}
+
+function laundrySnippets(text) {
+  const cleaned = cleanText(text);
+  const snippets = new Set();
+  const pattern = /.{0,90}(lavarropas|lavadero|laundry|lavander[ií]a|washer|washing machine).{0,130}/gi;
+  for (const match of cleaned.matchAll(pattern)) snippets.add(cleanText(match[0] || ''));
+  return Array.from(snippets).slice(0, 8);
+}
+
+function classifyLaundrySignal(source, text) {
+  const cleaned = cleanText(text);
+  const lower = cleaned.toLowerCase();
+  if (!/(lavarropas|lavadero|laundry|lavander[ií]a|washer|washing machine)/i.test(cleaned)) return null;
+  if (/(in building|lavadero com[uú]n|laundry|lavander[ií]a|amenit|sum|gimnasio|pileta|solarium)/i.test(cleaned)) {
+    return {
+      source,
+      classification: 'SHARED_BUILDING',
+      strength: /(in building|lavadero com[uú]n|laundry|lavander[ií]a)/i.test(cleaned) ? 'strong' : 'medium',
+      text: cleaned,
+    };
+  }
+  if (/(in unit|lavadero.*lavarropas|lavarropas.*lavadero|cocina.*lavarropas|lavarropas.*cocina|departamento.*lavarropas|unidad.*lavarropas)/i.test(lower)) {
+    return { source, classification: 'IN_UNIT', strength: 'medium', text: cleaned };
+  }
+  if (/(lavarropas|washer|washing machine)/i.test(cleaned)) {
+    return { source, classification: 'WASHER_PRESENT', strength: 'weak', text: cleaned };
+  }
+  return { source, classification: 'AMBIGUOUS', strength: 'weak', text: cleaned };
+}
+
+function collectLaundrySignals({ title, description, amenities, pageText }) {
+  const signals = [];
+  const seen = new Set();
+  const add = (signal) => {
+    if (!signal) return;
+    const key = signal.source + ':' + signal.classification + ':' + signal.text;
+    if (seen.has(key)) return;
+    seen.add(key);
+    signals.push(signal);
+  };
+  add(classifyLaundrySignal('title', title));
+  for (const snippet of laundrySnippets(description)) add(classifyLaundrySignal('description', snippet));
+  for (const amenity of amenities || []) add(classifyLaundrySignal('amenities', amenity));
+  if (signals.length === 0) {
+    for (const snippet of laundrySnippets(pageText)) add(classifyLaundrySignal('page_text', snippet));
+  }
+  return signals;
+}
+
 function uniqueZonapropImageUrls(urls) {
   const byId = new Map();
   for (const rawUrl of urls) {
@@ -72,6 +124,72 @@ function extractGalleryMeta() {
   return {
     gallery_count: parsed[0]?.count ?? null,
     gallery_text: parsed[0]?.text || containers[0]?.slice(0, 220) || '',
+  };
+}
+
+function extractPageMetadata() {
+  const cleanText = (text) => String(text || '').replace(/[–—]/g, '-').replace(/\\s+/g, ' ').trim();
+  const laundrySnippets = (text) => {
+    const cleaned = cleanText(text);
+    const snippets = new Set();
+    const pattern = /.{0,90}(lavarropas|lavadero|laundry|lavander[ií]a|washer|washing machine).{0,130}/gi;
+    for (const match of cleaned.matchAll(pattern)) snippets.add(cleanText(match[0] || ''));
+    return Array.from(snippets).slice(0, 8);
+  };
+  const classifyLaundrySignal = (source, text) => {
+    const cleaned = cleanText(text);
+    const lower = cleaned.toLowerCase();
+    if (!/(lavarropas|lavadero|laundry|lavander[ií]a|washer|washing machine)/i.test(cleaned)) return null;
+    if (/(in building|lavadero com[uú]n|laundry|lavander[ií]a|amenit|sum|gimnasio|pileta|solarium)/i.test(cleaned)) {
+      return {
+        source,
+        classification: 'SHARED_BUILDING',
+        strength: /(in building|lavadero com[uú]n|laundry|lavander[ií]a)/i.test(cleaned) ? 'strong' : 'medium',
+        text: cleaned,
+      };
+    }
+    if (/(in unit|lavadero.*lavarropas|lavarropas.*lavadero|cocina.*lavarropas|lavarropas.*cocina|departamento.*lavarropas|unidad.*lavarropas)/i.test(lower)) {
+      return { source, classification: 'IN_UNIT', strength: 'medium', text: cleaned };
+    }
+    if (/(lavarropas|washer|washing machine)/i.test(cleaned)) {
+      return { source, classification: 'WASHER_PRESENT', strength: 'weak', text: cleaned };
+    }
+    return { source, classification: 'AMBIGUOUS', strength: 'weak', text: cleaned };
+  };
+  const collectLaundrySignals = ({ title, description, amenities, pageText }) => {
+    const signals = [];
+    const seen = new Set();
+    const add = (signal) => {
+      if (!signal) return;
+      const key = signal.source + ':' + signal.classification + ':' + signal.text;
+      if (seen.has(key)) return;
+      seen.add(key);
+      signals.push(signal);
+    };
+    add(classifyLaundrySignal('title', title));
+    for (const snippet of laundrySnippets(description)) add(classifyLaundrySignal('description', snippet));
+    for (const amenity of amenities || []) add(classifyLaundrySignal('amenities', amenity));
+    if (signals.length === 0) {
+      for (const snippet of laundrySnippets(pageText)) add(classifyLaundrySignal('page_text', snippet));
+    }
+    return signals;
+  };
+
+  const title = cleanText(document.querySelector('h1')?.innerText || document.title || '');
+  const descriptionCandidates = Array.from(document.querySelectorAll('[class*="description"], .section-description, section'))
+    .map((el) => cleanText(el.innerText || el.textContent || ''))
+    .filter((text) => text.length > 80)
+    .sort((a, b) => b.length - a.length);
+  const description = descriptionCandidates.find((text) => !/Contactar|Ver teléfono|Publicar|Ingresar/i.test(text.slice(0, 250))) || descriptionCandidates[0] || '';
+  const amenities = Array.from(document.querySelectorAll('[class*="features"] li, [class*="amenit"] li'))
+    .map((el) => cleanText(el.innerText || el.textContent || ''))
+    .filter(Boolean);
+  const pageText = cleanText(document.body?.innerText || '');
+  return {
+    metadata_title: title,
+    metadata_description: description.slice(0, 4000),
+    metadata_amenities: Array.from(new Set(amenities)).slice(0, 80),
+    metadata_laundry_signals: collectLaundrySignals({ title, description, amenities, pageText }),
   };
 }
 
@@ -147,6 +265,7 @@ await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefine
 await state.page.waitForTimeout(1000);
 
 const galleryMeta = await state.page.evaluate(extractGalleryMeta);
+const pageMetadata = await state.page.evaluate(extractPageMetadata);
 const clickedGallery = await clickGalleryButton();
 if (clickedGallery) {
   await waitForPageLoad({ page: state.page, timeout: 8000 }).catch(() => undefined);
@@ -161,6 +280,7 @@ const imageUrls = uniqueZonapropImageUrls([
 const payload = {
   listing_url: listingUrl,
   page_url: state.page.url(),
+  ...pageMetadata,
   clicked_gallery: clickedGallery,
   gallery_count: galleryMeta.gallery_count,
   gallery_text: galleryMeta.gallery_text,

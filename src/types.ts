@@ -55,6 +55,10 @@ export type ListingExtraction = {
   provider?: "zonaprop" | "argenprop" | "airbnb";
   airbnb_laundry_amenity_label?: "WASHER" | "WASHER_IN_UNIT" | "WASHER_IN_BUILDING" | "NONE";
   airbnb_laundry_amenity_text?: string;
+  metadata_title?: string;
+  metadata_description?: string;
+  metadata_amenities?: string[];
+  metadata_laundry_signals?: LaundryMetadataSignal[];
   session_id?: string;
   page_url: string;
   image_urls: string[];
@@ -72,3 +76,10 @@ export type PlaywriterListingPayload = Omit<
   ListingExtraction,
   "session_id" | "gallery_count_matches_extracted"
 >;
+
+export type LaundryMetadataSignal = {
+  source: "title" | "description" | "amenities" | "airbnb_amenity" | "page_text";
+  classification: "IN_UNIT" | "SHARED_BUILDING" | "WASHER_PRESENT" | "AMBIGUOUS";
+  strength: "strong" | "medium" | "weak";
+  text: string;
+};
