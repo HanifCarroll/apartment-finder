@@ -5,7 +5,7 @@ import {
   listingConfidence,
   type ClassificationRecordLike,
   type ListingEvidence,
-} from "../src/listing-aggregation";
+} from "../src/listing/aggregation";
 
 function record(
   locationLabel: "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN" | "CONFLICTING",

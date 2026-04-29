@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES } from "../src/args";
-import { extractListingImageUrls } from "../src/listing-extraction";
-import { appendJsonl } from "../src/jsonl";
+import { DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES } from "../src/cli/args";
+import { extractListingImageUrls } from "../src/listing/extraction";
+import { appendJsonl } from "../src/lib/jsonl";
 
 type ListingFixture = {
   id: string;

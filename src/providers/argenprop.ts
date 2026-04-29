@@ -1,5 +1,5 @@
-import type { ListingExtraction } from "./types";
-import { decodeBasicHtmlEntities } from "./laundry-metadata";
+import type { ListingExtraction } from "../types";
+import { decodeBasicHtmlEntities } from "../laundry-metadata";
 
 const ARG_PROP_ORIGIN = "https://www.argenprop.com";
 

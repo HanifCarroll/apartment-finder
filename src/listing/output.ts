@@ -1,5 +1,5 @@
-import type { LocationLabel } from "./types";
-import type { LaundryMetadataSignal } from "./types";
+import type { LocationLabel } from "../types";
+import type { LaundryMetadataSignal } from "../types";
 
 export type ListingSummaryRecord = {
   ok?: boolean;

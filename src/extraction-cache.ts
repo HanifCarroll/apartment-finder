@@ -1,6 +1,6 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { appendJsonl } from "./jsonl";
+import { appendJsonl } from "./lib/jsonl";
 import type { ListingExtraction } from "./types";
 
 export type CachedListingExtraction = ListingExtraction & {

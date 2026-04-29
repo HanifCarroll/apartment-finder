@@ -290,6 +290,14 @@ bun run smoke:browserbase:sites
 `bun run playwright:install` installs the Chromium browser used by Playwright smoke checks and future direct browser automation.
 After filling `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`, run `bun run smoke:browserbase:sites` to check whether Browserbase can load Zonaprop, Argenprop, and Airbnb.
 
+Source layout:
+
+- `src/providers/` - provider-specific extraction and search behavior
+- `src/listing/` - listing extraction, aggregation, output, and scan orchestration
+- `src/browser/` - browser backend and Playwriter session helpers
+- `src/cli/` - CLI defaults and option parsing
+- `src/lib/` - generic filesystem, image, concurrency, and shell helpers
+
 Generated outputs, downloaded images, and secrets are ignored:
 
 - `.env`

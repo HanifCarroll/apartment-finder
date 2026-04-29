@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL } from "../src/args";
-import { DEFAULT_CONCURRENCY } from "../src/concurrency";
-import { mapConcurrent } from "../src/concurrency";
+import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL } from "../src/cli/args";
+import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
+import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
-import { loadImageFromUrl } from "../src/images";
+import { loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel } from "../src/openai-classifier";
-import { aggregateByPolicy, DEFAULT_LISTING_POLICY, isStrongEvidence, listingConfidence, type ClassificationRecordLike } from "../src/listing-aggregation";
+import { aggregateByPolicy, DEFAULT_LISTING_POLICY, isStrongEvidence, listingConfidence, type ClassificationRecordLike } from "../src/listing/aggregation";
 import { runClassification } from "../src/classifier-runner";
-import { appendJsonl } from "../src/jsonl";
+import { appendJsonl } from "../src/lib/jsonl";
 import type { Args, ImagePayload, LocationLabel, Verdict } from "../src/types";
 
 type ListingFixture = {

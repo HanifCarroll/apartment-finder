@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { Args, ImagePayload } from "./types";
+import type { Args, ImagePayload } from "../types";
 
 function mimeFromPath(path: string): string {
   const ext = extname(path).toLowerCase();

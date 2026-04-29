@@ -5,18 +5,18 @@ import {
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
-} from "../src/args";
-import { DEFAULT_CONCURRENCY } from "../src/concurrency";
+} from "../src/cli/args";
+import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import {
   defaultCommonScanOptions,
   parseCommonScanOption,
   type CommonScanCliOptions,
-} from "../src/cli-options";
+} from "../src/cli/options";
 import {
   type ListingExtractionRecord,
   type ListingSummaryRecord,
-} from "../src/listing-output";
-import { scanListing } from "../src/listing-scan-runner";
+} from "../src/listing/output";
+import { scanListing } from "../src/listing/scan-runner";
 
 type ReportArgs = CommonScanCliOptions & {
   listingUrl: string;

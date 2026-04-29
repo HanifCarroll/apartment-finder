@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchBackendForProvider } from "../src/listing-search";
+import { searchBackendForProvider } from "../src/listing/search";
 
 describe("searchBackendForProvider", () => {
   it("uses local Playwright for providers where medium search discovery passes", () => {

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE } from "../src/args";
-import { DEFAULT_CONCURRENCY } from "../src/concurrency";
-import { appendJsonl } from "../src/jsonl";
+import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE } from "../src/cli/args";
+import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
+import { appendJsonl } from "../src/lib/jsonl";
 import { runClassification } from "../src/classifier-runner";
 import type { Args, LocationLabel } from "../src/types";
 

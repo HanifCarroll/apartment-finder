@@ -1,5 +1,5 @@
-import { appendJsonl } from "../src/jsonl";
-import { findListingUrlsWithPlaywriter } from "../src/zonaprop";
+import { appendJsonl } from "../src/lib/jsonl";
+import { findListingUrlsWithPlaywriter } from "../src/providers/zonaprop";
 
 function parseArgs(argv: string[]) {
   const args = {

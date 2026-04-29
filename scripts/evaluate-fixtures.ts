@@ -1,9 +1,9 @@
 import OpenAI from "openai";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_DIR, DEFAULT_MODEL } from "../src/args";
-import { DEFAULT_CONCURRENCY, mapConcurrent } from "../src/concurrency";
-import { loadImageFromUrl } from "../src/images";
+import { DEFAULT_CACHE_DIR, DEFAULT_MODEL } from "../src/cli/args";
+import { DEFAULT_CONCURRENCY, mapConcurrent } from "../src/lib/concurrency";
+import { loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel } from "../src/openai-classifier";
 import type { LocationLabel, Verdict } from "../src/types";
 

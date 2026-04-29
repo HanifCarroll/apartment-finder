@@ -5,8 +5,8 @@ import {
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
 } from "./args";
-import { DEFAULT_CONCURRENCY } from "./concurrency";
-import type { ListingScanOptions } from "./listing-scan-runner";
+import { DEFAULT_CONCURRENCY } from "../lib/concurrency";
+import type { ListingScanOptions } from "../listing/scan-runner";
 
 export type CommonScanCliOptions = ListingScanOptions & {
   outPath?: string;

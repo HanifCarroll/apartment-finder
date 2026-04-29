@@ -1,11 +1,11 @@
-import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "./playwriter-json";
-import { createPlaywriterSearchScript } from "./search-playwriter";
-import { findListingUrlsWithPlaywright } from "./search-playwright";
+import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "../browser/playwriter-json";
+import { createPlaywriterSearchScript } from "../providers/search-playwriter";
+import { findListingUrlsWithPlaywright } from "../providers/search-playwright";
 import {
   detectSearchProvider,
   validateSearchUrl,
   type SearchProvider,
-} from "./search-providers";
+} from "../providers/search";
 
 const PLAYWRITER_JSON_START = "__APARTMENT_FINDER_SEARCH_JSON_START__";
 const PLAYWRITER_JSON_END = "__APARTMENT_FINDER_SEARCH_JSON_END__";

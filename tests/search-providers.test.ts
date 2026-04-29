@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectSearchProvider, validateSearchUrl } from "../src/search-providers";
+import { detectSearchProvider, validateSearchUrl } from "../src/providers/search";
 
 describe("detectSearchProvider", () => {
   it("detects supported search providers from URLs", () => {

@@ -1,11 +1,11 @@
-import { parseArgs } from "./args";
+import { parseArgs } from "./cli/args";
 import { runClassification } from "./classifier-runner";
-import { appendJsonl } from "./jsonl";
+import { appendJsonl } from "./lib/jsonl";
 import {
   findListingExtractionRecord,
   findListingSummaryRecord,
   formatListingSummaryText,
-} from "./listing-output";
+} from "./listing/output";
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));

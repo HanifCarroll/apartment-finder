@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { findListingUrlsFromSearchUrl } from "../src/listing-search";
-import type { SearchProvider } from "../src/search-providers";
+import { findListingUrlsFromSearchUrl } from "../src/listing/search";
+import type { SearchProvider } from "../src/providers/search";
 
 type SmokeCase = {
   provider: string;

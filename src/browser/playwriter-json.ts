@@ -1,4 +1,4 @@
-import { runCommand } from "./shell";
+import { runCommand } from "../lib/shell";
 
 export function parsePlaywriterJson<T>(stdout: string, startMarker: string, endMarker: string): T {
   const cleaned = stdout.replace(/^\[log\]\s?/gm, "");

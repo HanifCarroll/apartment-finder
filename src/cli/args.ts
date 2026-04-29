@@ -1,5 +1,5 @@
-import type { Args } from "./types";
-import { DEFAULT_CONCURRENCY } from "./concurrency";
+import type { Args } from "../types";
+import { DEFAULT_CONCURRENCY } from "../lib/concurrency";
 
 export const DEFAULT_MODEL = "gpt-5.4-mini";
 export const DEFAULT_ESCALATION_MODEL = "gpt-5.4";

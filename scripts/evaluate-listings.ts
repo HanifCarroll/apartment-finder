@@ -5,7 +5,7 @@ import {
   aggregateByPolicy,
   aggregateTwoModelAgreement,
   type ListingEvidence,
-} from "../src/listing-aggregation";
+} from "../src/listing/aggregation";
 
 type ListingFixture = {
   id: string;

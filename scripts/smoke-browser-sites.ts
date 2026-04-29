@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { createBrowserSession, type BrowserBackend } from "../src/browser-backend";
+import { createBrowserSession, type BrowserBackend } from "../src/browser/backend";
 import { SITE_SMOKE_CASES } from "../src/site-smoke-cases";
-import type { SearchProvider } from "../src/search-providers";
+import type { SearchProvider } from "../src/providers/search";
 
 const program = new Command()
   .name("bun run smoke:browser:sites")

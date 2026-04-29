@@ -1,4 +1,4 @@
-import type { LocationLabel, Verdict } from "./types";
+import type { LocationLabel, Verdict } from "../types";
 
 export type ClassificationRecordLike = {
   ok?: boolean;

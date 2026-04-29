@@ -6,19 +6,19 @@ import {
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
-} from "../src/args";
-import { DEFAULT_CONCURRENCY } from "../src/concurrency";
+} from "../src/cli/args";
+import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import {
   defaultCommonScanOptions,
   parseCommonScanOption,
   type CommonScanCliOptions,
-} from "../src/cli-options";
+} from "../src/cli/options";
 import {
   appendFailedListingScan,
   formatListingScanResult,
   listingScanHeader,
   scanListing,
-} from "../src/listing-scan-runner";
+} from "../src/listing/scan-runner";
 
 type ScanArgs = CommonScanCliOptions & {
   inputPath?: string;

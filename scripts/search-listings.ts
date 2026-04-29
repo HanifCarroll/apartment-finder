@@ -1,26 +1,26 @@
 #!/usr/bin/env bun
 import { Command } from "commander";
-import { appendJsonl } from "../src/jsonl";
+import { appendJsonl } from "../src/lib/jsonl";
 import {
   DEFAULT_CACHE_DIR,
   DEFAULT_ESCALATION_MODEL,
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
-} from "../src/args";
-import { DEFAULT_CONCURRENCY } from "../src/concurrency";
+} from "../src/cli/args";
+import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import {
   defaultCommonScanOptions,
   type CommonScanCliOptions,
-} from "../src/cli-options";
+} from "../src/cli/options";
 import {
   appendFailedListingScan,
   formatListingScanResult,
   listingScanHeader,
   scanListing,
-} from "../src/listing-scan-runner";
-import { findListingUrlsFromSearchUrl } from "../src/listing-search";
-import type { ListingSearchResult } from "../src/listing-search";
+} from "../src/listing/scan-runner";
+import { findListingUrlsFromSearchUrl } from "../src/listing/search";
+import type { ListingSearchResult } from "../src/listing/search";
 import type { LocationLabel } from "../src/types";
 
 type SearchArgs = CommonScanCliOptions & {

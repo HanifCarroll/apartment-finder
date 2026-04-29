@@ -1,14 +1,14 @@
 import OpenAI from "openai";
-import { mapConcurrent } from "./concurrency";
-import { loadImage, loadImageFromUrl } from "./images";
+import { mapConcurrent } from "./lib/concurrency";
+import { loadImage, loadImageFromUrl } from "./lib/images";
 import {
   DEFAULT_LISTING_POLICY,
   aggregateByPolicy,
   isStrongEvidence,
   listingConfidence,
   type ClassificationRecordLike,
-} from "./listing-aggregation";
-import { extractListingImageUrls } from "./listing-extraction";
+} from "./listing/aggregation";
+import { extractListingImageUrls } from "./listing/extraction";
 import { classifyWithModel } from "./openai-classifier";
 import type { Args, ImagePayload, Verdict } from "./types";
 

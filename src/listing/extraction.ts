@@ -1,11 +1,11 @@
-import { extractAirbnbListingImageUrls } from "./airbnb";
-import { extractArgenpropListingImageUrls } from "./argenprop";
+import { extractAirbnbListingImageUrls } from "../providers/airbnb";
+import { extractArgenpropListingImageUrls } from "../providers/argenprop";
 import {
   readCachedListingExtraction,
   writeCachedListingExtraction,
-} from "./extraction-cache";
-import type { Args, ListingExtraction } from "./types";
-import { extractListingImageUrlsWithPlaywriter } from "./zonaprop";
+} from "../extraction-cache";
+import type { Args, ListingExtraction } from "../types";
+import { extractListingImageUrlsWithPlaywriter } from "../providers/zonaprop";
 
 const MAX_EXTRACTION_ATTEMPTS = 3;
 

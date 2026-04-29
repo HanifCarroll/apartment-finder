@@ -1,5 +1,5 @@
-import type { ListingExtraction } from "./types";
-import { classifyAirbnbLaundryAmenitySignal } from "./laundry-metadata";
+import type { ListingExtraction } from "../types";
+import { classifyAirbnbLaundryAmenitySignal } from "../laundry-metadata";
 
 function decodeHtmlEntities(text: string): string {
   return text

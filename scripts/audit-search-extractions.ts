@@ -2,9 +2,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Command } from "commander";
-import { DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES } from "../src/args";
-import { extractListingImageUrls } from "../src/listing-extraction";
-import { findListingUrlsFromSearchUrl } from "../src/listing-search";
+import { DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES } from "../src/cli/args";
+import { extractListingImageUrls } from "../src/listing/extraction";
+import { findListingUrlsFromSearchUrl } from "../src/listing/search";
 import type { ListingExtraction } from "../src/types";
 
 type AuditCase = {

@@ -1,6 +1,6 @@
-import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "./playwriter-json";
-import { findListingUrlsFromSearchUrl } from "./listing-search";
-import type { ListingExtraction, PlaywriterListingPayload } from "./types";
+import { createPlaywriterSession, parsePlaywriterJson, runPlaywriterScript } from "../browser/playwriter-json";
+import { findListingUrlsFromSearchUrl } from "../listing/search";
+import type { ListingExtraction, PlaywriterListingPayload } from "../types";
 
 const PLAYWRITER_JSON_START = "__APARTMENT_FINDER_JSON_START__";
 const PLAYWRITER_JSON_END = "__APARTMENT_FINDER_JSON_END__";
