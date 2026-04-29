@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSearchUrl, parseNeighborhoodList } from "../src/core";
+import { buildSearchUrl, parseNeighborhoodList, supportedNeighborhoodOptions } from "../src/core";
 
 describe("parseNeighborhoodList", () => {
   it("supports repeated and comma-separated neighborhoods", () => {
@@ -64,5 +64,19 @@ describe("buildSearchUrl", () => {
       provider: "zonaprop",
       neighborhoods: ["not-a-real-neighborhood"],
     })).toThrow("Unsupported neighborhood");
+  });
+});
+
+describe("supportedNeighborhoodOptions", () => {
+  it("exposes checkbox-ready neighborhood metadata", () => {
+    const options = supportedNeighborhoodOptions();
+    const nunez = options.find((option) => option.key === "nunez");
+
+    expect(options.length).toBeGreaterThan(25);
+    expect(nunez).toMatchObject({
+      label: "Nuñez",
+      group: "North corridor",
+      providers: ["zonaprop", "argenprop", "airbnb"],
+    });
   });
 });

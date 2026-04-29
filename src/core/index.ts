@@ -1,9 +1,11 @@
 export {
   buildSearchUrl,
   parseNeighborhoodList,
+  supportedNeighborhoodOptions,
   supportedNeighborhoods,
   type BuiltSearchUrl,
   type SearchFilters,
+  type SupportedNeighborhood,
 } from "./search-url-builder";
 export {
   appendFailedListingScan,

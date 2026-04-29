@@ -254,7 +254,7 @@ Search audit records include `page_urls`, so you can confirm which result pages 
 
 ## Web UI
 
-The TanStack Start UI wraps the same `src/core` services used by the CLI. It supports provider filters, raw search URLs, discover-only runs, and full model-backed scans.
+The TanStack Start UI wraps the same `src/core` services used by the CLI. It supports provider filters, checkbox neighborhood selection, raw search URLs, discover-only runs, and full model-backed scans.
 
 ```sh
 bun run dev

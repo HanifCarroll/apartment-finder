@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { runSearch, type SearchUiResult } from "@/web/search.functions";
 import { DEFAULT_ESCALATION_MODEL, DEFAULT_MAX_IMAGES, DEFAULT_MODEL } from "@/cli/args";
+import { supportedNeighborhoodOptions, type SupportedNeighborhood } from "@/core/search-url-builder";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
@@ -35,7 +36,7 @@ type FormState = {
   mode: "filters" | "url";
   provider: "zonaprop" | "argenprop" | "airbnb";
   searchUrl: string;
-  neighborhoods: string;
+  neighborhoods: string[];
   maxPriceUsd: string;
   ambientes: string;
   dormitorios: string;
@@ -55,7 +56,7 @@ const defaultForm: FormState = {
   mode: "filters",
   provider: "zonaprop",
   searchUrl: "",
-  neighborhoods: "nunez,las-canitas",
+  neighborhoods: ["nunez", "las-canitas"],
   maxPriceUsd: "1500",
   ambientes: "",
   dormitorios: "",
@@ -233,6 +234,8 @@ function FilterFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const neighborhoodGroups = React.useMemo(() => groupNeighborhoods(supportedNeighborhoodOptions()), []);
+
   return (
     <div className="space-y-4">
       <Field label="Provider" htmlFor="provider">
@@ -248,14 +251,37 @@ function FilterFields({
         </select>
       </Field>
 
-      <Field label="Neighborhoods" htmlFor="neighborhoods">
-        <Input
-          id="neighborhoods"
-          value={form.neighborhoods}
-          placeholder="nunez,las-canitas"
-          onChange={(event) => updateForm(setForm, { neighborhoods: event.target.value })}
-        />
-      </Field>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <Label>Neighborhoods</Label>
+          <Badge variant="outline">{form.neighborhoods.length} selected</Badge>
+        </div>
+        <div className="max-h-72 overflow-auto rounded-md border bg-card p-3">
+          <div className="space-y-4">
+            {neighborhoodGroups.map(([group, neighborhoods]) => (
+              <div key={group} className="space-y-2">
+                <div className="text-xs font-medium uppercase text-muted-foreground">{group}</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {neighborhoods.map((neighborhood) => (
+                    <NeighborhoodCheckbox
+                      key={neighborhood.key}
+                      neighborhood={neighborhood}
+                      checked={form.neighborhoods.includes(neighborhood.key)}
+                      onChange={(checked) => {
+                        updateForm(setForm, {
+                          neighborhoods: checked
+                            ? [...form.neighborhoods, neighborhood.key]
+                            : form.neighborhoods.filter((key) => key !== neighborhood.key),
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Max USD" htmlFor="maxPriceUsd">
@@ -498,6 +524,26 @@ function ToggleRow({
   );
 }
 
+function NeighborhoodCheckbox({
+  neighborhood,
+  checked,
+  onChange,
+}: {
+  neighborhood: SupportedNeighborhood;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const id = `neighborhood-${neighborhood.key}`;
+  return (
+    <div className="flex min-h-9 items-center gap-3 rounded-md px-2 hover:bg-muted">
+      <Checkbox id={id} checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <Label htmlFor={id} className="flex-1 cursor-pointer text-sm font-normal">
+        {neighborhood.label}
+      </Label>
+    </div>
+  );
+}
+
 function ModeButton({
   active,
   onClick,
@@ -517,6 +563,17 @@ function ModeButton({
       {children}
     </Button>
   );
+}
+
+function groupNeighborhoods(options: SupportedNeighborhood[]): Array<[string, SupportedNeighborhood[]]> {
+  const groups = new Map<string, SupportedNeighborhood[]>();
+  for (const option of options) {
+    const items = groups.get(option.group) || [];
+    items.push(option);
+    groups.set(option.group, items);
+  }
+  const order = ["North corridor", "Central", "West", "South", "Other CABA"];
+  return Array.from(groups.entries()).sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

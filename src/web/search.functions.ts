@@ -13,7 +13,7 @@ const SearchRequestSchema = z.object({
   mode: z.enum(["url", "filters"]),
   searchUrl: z.string().trim().optional(),
   provider: z.enum(["zonaprop", "argenprop", "airbnb"]).optional(),
-  neighborhoods: z.string().trim().optional(),
+  neighborhoods: z.union([z.string().trim(), z.array(z.string().trim())]).optional(),
   maxPriceUsd: z.coerce.number().int().positive().optional(),
   ambientes: z.coerce.number().int().positive().optional(),
   dormitorios: z.coerce.number().int().positive().optional(),
@@ -79,7 +79,9 @@ export const runSearch = createServerFn({ method: "POST" })
       if (!data.provider) throw new Error("Choose a provider.");
       const built = buildSearchUrl({
         provider: data.provider,
-        neighborhoods: parseNeighborhoodList([data.neighborhoods || ""]),
+        neighborhoods: Array.isArray(data.neighborhoods)
+          ? data.neighborhoods
+          : parseNeighborhoodList([data.neighborhoods || ""]),
         maxPriceUsd: data.maxPriceUsd,
         ambientes: data.ambientes,
         dormitorios: data.dormitorios,
