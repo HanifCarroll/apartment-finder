@@ -45,7 +45,7 @@ Supported providers:
 
 - Zonaprop: browser extraction with Playwriter.
 - Argenprop: gallery endpoint extraction.
-- Airbnb: room page payload extraction.
+- Airbnb: room page payload extraction, including washer amenity metadata when the page says `Washer`, `Washer - in unit`, or `Washer - in building`.
 
 For normal use, prefer the two-pass listing summary:
 
@@ -60,10 +60,13 @@ By default this prints a concise listing-level result:
 
 ```text
 IN_UNIT high
+source: vision
 evidence: photo 16 0.98, photo 14 0.97, photo 2 0.93
 gallery: airbnb 32/32 photos cache
 best_url: https://a0.muscache.com/im/pictures/...
 ```
+
+For Airbnb listings, explicit page amenities override the vision aggregate when they distinguish location. `Washer - in unit` becomes `IN_UNIT`; `Washer - in building` becomes `SHARED_BUILDING`; plain `Washer` still falls back to vision.
 
 Use `--json` to print the raw `listing_summary` JSON instead.
 
@@ -71,6 +74,9 @@ The summary record includes:
 
 - `decision`: `IN_UNIT`, `SHARED_BUILDING`, `UNKNOWN`, or `CONFLICTING`
 - `confidence`: `high`, `medium`, or `low`
+- `decision_source`: `vision` or `airbnb_amenity`
+- `vision_decision` and `vision_confidence` when a provider metadata override is used
+- `airbnb_laundry_amenity_label` and `airbnb_laundry_amenity_text` when present
 - `evidence`: strongest photo-level evidence and image URLs
 - `escalated_image_indexes`: photos sent to the second-pass model
 - `first_pass_model`, `escalation_model`, and `policy`
@@ -141,8 +147,8 @@ bun run scan \
 The default output is tab-separated for easy filtering:
 
 ```text
-decision  confidence  gallery  evidence  best_url  listing_url
-IN_UNIT   high        32/32    photo 16 0.98, photo 14 0.97  https://...  https://...
+decision  confidence  source  amenity  gallery  evidence  best_url  listing_url
+IN_UNIT   high        vision          32/32    photo 16 0.98, photo 14 0.97  https://...  https://...
 ```
 
 You can also pipe URLs through stdin:
@@ -185,7 +191,7 @@ bun run eval:listing-summaries \
 
 Current best benchmark on the original 40 labeled Zonaprop listings was the two-pass summary workflow with `gpt-5.4-mini` plus `gpt-5.4` escalation: `39/40` overall, `10/10` in-unit, `16/17` shared-building, and `13/13` unknown.
 
-The first Airbnb fixture batch scored `13/14` with the same two-pass workflow: `6/6` in-unit, `4/4` unknown, and `3/4` shared-building.
+Listing summary evals report accuracy by expected class and by `decision_source`, so Airbnb metadata overrides can be tracked separately from vision-only decisions.
 
 ## Development
 

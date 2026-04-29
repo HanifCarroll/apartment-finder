@@ -53,6 +53,8 @@ export type ImagePayload = {
 export type ListingExtraction = {
   listing_url: string;
   provider?: "zonaprop" | "argenprop" | "airbnb";
+  airbnb_laundry_amenity_label?: "WASHER" | "WASHER_IN_UNIT" | "WASHER_IN_BUILDING" | "NONE";
+  airbnb_laundry_amenity_text?: string;
   session_id?: string;
   page_url: string;
   image_urls: string[];

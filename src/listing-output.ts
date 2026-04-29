@@ -6,6 +6,11 @@ export type ListingSummaryRecord = {
   listing_url?: string;
   decision?: LocationLabel;
   confidence?: string;
+  decision_source?: "vision" | "airbnb_amenity" | string;
+  vision_decision?: LocationLabel;
+  vision_confidence?: string;
+  airbnb_laundry_amenity_label?: string;
+  airbnb_laundry_amenity_text?: string;
   policy?: string;
   image_count?: number;
   evidence?: Array<{
@@ -30,6 +35,8 @@ export type ListingExtractionRecord = {
   image_count?: number;
   gallery_count_matches_extracted?: boolean | null;
   extraction_source?: string;
+  airbnb_laundry_amenity_label?: string;
+  airbnb_laundry_amenity_text?: string;
 };
 
 export function findListingSummaryRecord(records: unknown[]): ListingSummaryRecord | undefined {
@@ -61,6 +68,24 @@ function bestEvidenceUrl(summary: ListingSummaryRecord): string {
   return summary.evidence?.find((item) => item.image_url)?.image_url || "";
 }
 
+function formatDecisionSource(summary: ListingSummaryRecord): string {
+  if (summary.decision_source === "airbnb_amenity") {
+    const text = summary.airbnb_laundry_amenity_text || summary.airbnb_laundry_amenity_label || "Airbnb washer amenity";
+    const vision = summary.vision_decision ? `, vision ${summary.vision_decision}` : "";
+    return `source: airbnb_amenity (${text}${vision})`;
+  }
+
+  return `source: ${summary.decision_source || "vision"}`;
+}
+
+function formatAmenity(summary: ListingSummaryRecord, extraction?: ListingExtractionRecord): string {
+  return summary.airbnb_laundry_amenity_text
+    || extraction?.airbnb_laundry_amenity_text
+    || summary.airbnb_laundry_amenity_label
+    || extraction?.airbnb_laundry_amenity_label
+    || "";
+}
+
 export function formatListingSummaryText(
   summary: ListingSummaryRecord,
   extraction?: ListingExtractionRecord,
@@ -78,6 +103,7 @@ export function formatListingSummaryText(
 
   return [
     `${summary.decision || "UNKNOWN"} ${summary.confidence || "unknown"}`,
+    formatDecisionSource(summary),
     `evidence: ${formatPhotoRefs(summary)}`,
     `gallery:${provider} ${gallery} photos${source}`,
     bestUrl ? `best_url: ${bestUrl}` : undefined,
@@ -97,10 +123,13 @@ export function formatListingScanLine(
     : `${summary.image_count ?? "?"}/?`;
   const evidence = formatPhotoRefs(summary);
   const bestUrl = bestEvidenceUrl(summary);
+  const amenity = formatAmenity(summary, extraction);
 
   return [
     summary.decision || "UNKNOWN",
     summary.confidence || "unknown",
+    summary.decision_source || "vision",
+    amenity,
     gallery,
     evidence,
     bestUrl,

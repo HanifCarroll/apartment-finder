@@ -13,6 +13,7 @@ This repo is a Bun CLI prototype for deciding whether an apartment listing has l
 - When adding a listing provider, implement it in its own `src/<provider>.ts` file and route through `src/listing-extraction.ts`.
 - Extraction records should include `provider`, `gallery_count`, `image_count`, `gallery_count_matches_extracted`, and `extraction_source`.
 - Prefer direct listing metadata or gallery endpoints when available. Use browser automation only when HTTP extraction is unreliable.
+- For Airbnb, treat explicit washer amenity labels as first-class listing metadata: `Washer - in unit` maps to `IN_UNIT`, `Washer - in building` maps to `SHARED_BUILDING`, and plain `Washer` falls back to the vision aggregate.
 - Keep single-listing and batch-scan human output consistent by using `src/listing-output.ts`.
 
 ## Checks
@@ -40,4 +41,4 @@ bun run eval:listing-summaries --results results/listing-summary-run.jsonl
 
 - Zonaprop: Playwriter extraction, clicks `Ver todas las fotos`.
 - Argenprop: HTTP extraction from `gallerypartial`, ignores video counts.
-- Airbnb: HTTP extraction from room page payload, filters to the room's `Hosting-<id>` image set.
+- Airbnb: HTTP extraction from room page payload, filters to the room's `Hosting-<id>` image set, and records washer amenity metadata.

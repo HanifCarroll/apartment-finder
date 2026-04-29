@@ -3,6 +3,9 @@ import type { ListingExtraction } from "./types";
 function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, "\"")
     .replace(/\\u0026/g, "&");
 }
 
@@ -31,6 +34,46 @@ function parseRoomId(listingUrl: string): string {
 function parsePictureCount(html: string): number | null {
   const match = html.match(/"pictureCount"\s*:\s*(\d{1,4})/);
   return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function normalizeAmenityText(text: string): string {
+  return decodeHtmlEntities(text)
+    .replace(/\\u00a0/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/[–—-]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseAirbnbLaundryAmenity(html: string): Pick<
+  ListingExtraction,
+  "airbnb_laundry_amenity_label" | "airbnb_laundry_amenity_text"
+> {
+  const washerTitles = new Set<string>();
+
+  const washerAmenityPattern = /"title"\s*:\s*"([^"]*washer[^"]*)"[\s\S]{0,220}?"icon"\s*:\s*"SYSTEM_WASHER"|"icon"\s*:\s*"SYSTEM_WASHER"[\s\S]{0,220}?"title"\s*:\s*"([^"]*washer[^"]*)"/gi;
+  for (const match of html.matchAll(washerAmenityPattern)) {
+    const title = normalizeAmenityText(match[1] || match[2] || "");
+    if (title) washerTitles.add(title);
+  }
+
+  if (washerTitles.size === 0) {
+    for (const match of html.matchAll(/"title"\s*:\s*"([^"]*washer[^"]*)"/gi)) {
+      const title = normalizeAmenityText(match[1] || "");
+      if (title) washerTitles.add(title);
+    }
+  }
+
+  const text = Array.from(washerTitles).join("; ");
+  const lower = text.toLowerCase();
+  if (!text) return { airbnb_laundry_amenity_label: "NONE", airbnb_laundry_amenity_text: "" };
+  if (lower.includes("in building")) {
+    return { airbnb_laundry_amenity_label: "WASHER_IN_BUILDING", airbnb_laundry_amenity_text: text };
+  }
+  if (lower.includes("in unit")) {
+    return { airbnb_laundry_amenity_label: "WASHER_IN_UNIT", airbnb_laundry_amenity_text: text };
+  }
+  return { airbnb_laundry_amenity_label: "WASHER", airbnb_laundry_amenity_text: text };
 }
 
 function normalizeAirbnbImageUrl(rawUrl: string): string {
@@ -75,9 +118,11 @@ export async function extractAirbnbListingImageUrls(
   const html = await fetchText(listingUrl);
   const galleryCount = parsePictureCount(html);
   const imageUrls = uniqueAirbnbImageUrls(extractImageUrls(html), roomId, maxImages);
+  const laundryAmenity = parseAirbnbLaundryAmenity(html);
 
   return {
     provider: "airbnb",
+    ...laundryAmenity,
     listing_url: listingUrl,
     page_url: new URL(`/rooms/${roomId}`, "https://www.airbnb.com").href,
     image_urls: imageUrls,

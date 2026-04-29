@@ -171,7 +171,7 @@ if (urls.length === 0) {
 }
 
 if (!args.jsonOutput) {
-  console.log(["decision", "confidence", "gallery", "evidence", "best_url", "listing_url"].join("\t"));
+  console.log(["decision", "confidence", "source", "amenity", "gallery", "evidence", "best_url", "listing_url"].join("\t"));
 }
 
 for (const listingUrl of urls) {

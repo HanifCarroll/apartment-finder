@@ -14,6 +14,11 @@ type SummaryRecord = {
   listing_url?: string;
   decision?: LocationLabel;
   confidence?: string;
+  decision_source?: string;
+  vision_decision?: LocationLabel;
+  vision_confidence?: string;
+  airbnb_laundry_amenity_label?: string;
+  airbnb_laundry_amenity_text?: string;
   policy?: string;
   first_pass_model?: string;
   escalation_model?: string;
@@ -31,6 +36,11 @@ type EvalRecord = {
   predicted_location: LocationLabel;
   exact: boolean;
   confidence?: string;
+  decision_source?: string;
+  vision_decision?: LocationLabel;
+  vision_confidence?: string;
+  airbnb_laundry_amenity_label?: string;
+  airbnb_laundry_amenity_text?: string;
   policy?: string;
   first_pass_model?: string;
   escalation_model?: string;
@@ -155,6 +165,7 @@ function summarize(records: EvalRecord[]) {
   const okRecords = records.filter((record) => record.ok);
   const overall = emptyBucket();
   const byExpected = new Map<LocationLabel, ReturnType<typeof emptyBucket>>();
+  const byDecisionSource = new Map<string, ReturnType<typeof emptyBucket>>();
   let escalatedListings = 0;
   let escalatedImages = 0;
 
@@ -163,6 +174,11 @@ function summarize(records: EvalRecord[]) {
     const bucket = byExpected.get(record.expected_location) || emptyBucket();
     addToBucket(bucket, record);
     byExpected.set(record.expected_location, bucket);
+
+    const source = record.decision_source || "unknown";
+    const sourceBucket = byDecisionSource.get(source) || emptyBucket();
+    addToBucket(sourceBucket, record);
+    byDecisionSource.set(source, sourceBucket);
 
     if ((record.escalated_image_count || 0) > 0) escalatedListings += 1;
     escalatedImages += record.escalated_image_count || 0;
@@ -184,6 +200,9 @@ function summarize(records: EvalRecord[]) {
     by_expected_location: Object.fromEntries(
       Array.from(byExpected.entries()).map(([location, bucket]) => [location, formatBucket(bucket)]),
     ),
+    by_decision_source: Object.fromEntries(
+      Array.from(byDecisionSource.entries()).map(([source, bucket]) => [source, formatBucket(bucket)]),
+    ),
   };
 }
 
@@ -198,6 +217,10 @@ function printSummary(summary: ReturnType<typeof summarize>) {
   console.log("by expected listing location:");
   for (const [location, bucket] of Object.entries(summary.by_expected_location)) {
     console.log(`  ${location}: ${bucket.correct}/${bucket.total} (${bucket.accuracy})`);
+  }
+  console.log("by decision source:");
+  for (const [source, bucket] of Object.entries(summary.by_decision_source)) {
+    console.log(`  ${source}: ${bucket.correct}/${bucket.total} (${bucket.accuracy})`);
   }
 }
 
@@ -234,6 +257,11 @@ const evalRecords = listings.map((listing): EvalRecord => {
     predicted_location: summaryRecord.decision,
     exact: summaryRecord.decision === listing.expected_listing_location,
     confidence: summaryRecord.confidence,
+    decision_source: summaryRecord.decision_source,
+    vision_decision: summaryRecord.vision_decision,
+    vision_confidence: summaryRecord.vision_confidence,
+    airbnb_laundry_amenity_label: summaryRecord.airbnb_laundry_amenity_label,
+    airbnb_laundry_amenity_text: summaryRecord.airbnb_laundry_amenity_text,
     policy: summaryRecord.policy,
     first_pass_model: summaryRecord.first_pass_model,
     escalation_model: summaryRecord.escalation_model,

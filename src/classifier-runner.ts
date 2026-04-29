@@ -107,6 +107,16 @@ function isEscalationCandidate(record: ClassificationRecordLike, firstPassAggreg
   return false;
 }
 
+function airbnbAmenityDecision(extraction: {
+  provider?: string;
+  airbnb_laundry_amenity_label?: string;
+}): "IN_UNIT" | "SHARED_BUILDING" | null {
+  if (extraction.provider !== "airbnb") return null;
+  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_UNIT") return "IN_UNIT";
+  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_BUILDING") return "SHARED_BUILDING";
+  return null;
+}
+
 async function classifyListing(args: Args): Promise<unknown[]> {
   if (!args.listingUrl) throw new Error("Missing listing URL.");
 
@@ -212,13 +222,19 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         Boolean(record && typeof record === "object" && "verdict" in record),
       )];
       const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
+      const amenityDecision = airbnbAmenityDecision(extraction);
       records.push({
         ok: true,
         type: "listing_summary",
         created_at: new Date().toISOString(),
         listing_url: args.listingUrl,
-        decision: finalAggregate.predictedLocation,
-        confidence: listingConfidence(finalAggregate),
+        decision: amenityDecision || finalAggregate.predictedLocation,
+        confidence: amenityDecision ? "high" : listingConfidence(finalAggregate),
+        decision_source: amenityDecision ? "airbnb_amenity" : "vision",
+        vision_decision: finalAggregate.predictedLocation,
+        vision_confidence: listingConfidence(finalAggregate),
+        airbnb_laundry_amenity_label: extraction.airbnb_laundry_amenity_label,
+        airbnb_laundry_amenity_text: extraction.airbnb_laundry_amenity_text,
         policy: DEFAULT_LISTING_POLICY,
         first_pass_model: args.models[0],
         escalation_model: args.escalationModel,
