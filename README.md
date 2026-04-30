@@ -183,6 +183,12 @@ bun run summary:listings \
 
 The manifest keeps the original remote image URL for evidence while loading the image bytes from `fixtures/assets/listings/...`, so reports remain readable and evals survive unpublished listings.
 
+Fixture image files are tracked with Git LFS. If a clone has pointer files instead of real images, install Git LFS and run:
+
+```sh
+git lfs pull
+```
+
 ## Smoke Test Extraction
 
 Provider-specific smoke fixtures are in `fixtures/listings-<provider>.jsonl`.
