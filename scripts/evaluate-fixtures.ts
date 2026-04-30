@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { DEFAULT_CACHE_DIR, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY, mapConcurrent } from "../src/lib/concurrency";
 import { loadImageFromUrl } from "../src/lib/images";
-import { classifyWithModel } from "../src/openai-classifier";
+import { classifyWithModel, modelRunOptionsFromArgs } from "../src/openai-classifier";
 import type { LocationLabel, Verdict } from "../src/types";
 
 type Fixture = {
@@ -300,6 +300,7 @@ async function main() {
   const fixtures = parseJsonl<Fixture>(await readFile(args.fixturesPath, "utf8"))
     .slice(0, args.limit);
   const client = new OpenAI();
+  const modelOptions = modelRunOptionsFromArgs(args);
   const imageCache = new Map<string, ReturnType<typeof loadImageFromUrl>>();
   const jobs = fixtures.flatMap((fixture, fixtureIndex) =>
     args.models.map((model, modelIndex): EvalJob => ({ fixture, fixtureIndex, model, modelIndex })),
@@ -313,12 +314,7 @@ async function main() {
         imageCache.set(job.fixture.image_url, imagePromise);
       }
       const image = await imagePromise;
-      const result = await classifyWithModel(client, job.model, image, args.detail, {
-        modelCachePath: args.modelCachePath,
-        useModelCache: args.useModelCache,
-        refreshModelCache: args.refreshModelCache,
-        shadowVerdictV2: args.shadowVerdictV2,
-      });
+      const result = await classifyWithModel(client, job.model, image, args.detail, modelOptions);
       const locationCorrect = result.verdict.location_label === job.fixture.expected_location;
       const containsCorrect =
         result.verdict.contains_washing_machine === job.fixture.expected_contains_washing_machine;

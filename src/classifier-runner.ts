@@ -10,7 +10,7 @@ import {
 } from "./listing/aggregation";
 import { DEFAULT_ESCALATION_POLICY, selectEscalationIndexes } from "./listing/escalation";
 import { extractListingImageUrls } from "./listing/extraction";
-import { classifyWithModel } from "./openai-classifier";
+import { classifyWithModel, modelRunOptionsFromArgs } from "./openai-classifier";
 import type { Args, ImagePayload, Verdict } from "./types";
 
 const STAGED_BATCH_SIZE = 6;
@@ -34,12 +34,7 @@ async function classifyImagePayload(
   extra: Record<string, unknown> = {},
 ): Promise<unknown[]> {
   const records = [];
-  const modelOptions = {
-    modelCachePath: args.modelCachePath,
-    useModelCache: args.useModelCache,
-    refreshModelCache: args.refreshModelCache,
-    shadowVerdictV2: args.shadowVerdictV2,
-  };
+  const modelOptions = modelRunOptionsFromArgs(args);
 
   for (const model of args.models) {
     try {
@@ -309,12 +304,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
               durationMs: Math.round(performance.now() - imageLoadStartedAt),
             });
             const escalationImageStartedAt = performance.now();
-            const result = await classifyWithModel(client, args.escalationModel, image, args.detail, {
-              modelCachePath: args.modelCachePath,
-              useModelCache: args.useModelCache,
-              refreshModelCache: args.refreshModelCache,
-              shadowVerdictV2: args.shadowVerdictV2,
-            });
+            const result = await classifyWithModel(client, args.escalationModel, image, args.detail, modelRunOptionsFromArgs(args));
             logger.info({
               event: "image_phase_finished",
               phase: "classify_escalation",

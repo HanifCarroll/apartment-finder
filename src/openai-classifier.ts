@@ -12,6 +12,24 @@ import type { Args, ImagePayload, ShadowVerdictV2, Verdict } from "./types";
 import { VerdictSchema } from "./types";
 import { buildShadowVerdictV2 } from "./verdict-v2";
 
+export type ModelRunOptions = {
+  modelCachePath?: string;
+  useModelCache?: boolean;
+  refreshModelCache?: boolean;
+  shadowVerdictV2?: boolean;
+};
+
+export function modelRunOptionsFromArgs(args: Pick<Args,
+  "modelCachePath" | "useModelCache" | "refreshModelCache" | "shadowVerdictV2"
+>): ModelRunOptions {
+  return {
+    modelCachePath: args.modelCachePath,
+    useModelCache: args.useModelCache,
+    refreshModelCache: args.refreshModelCache,
+    shadowVerdictV2: args.shadowVerdictV2,
+  };
+}
+
 function classificationPrompt(): string {
   return `You are classifying apartment listing photos for a renter who wants a washing machine inside the private apartment unit.
 
@@ -42,12 +60,7 @@ export async function classifyWithModel(
   model: string,
   image: ImagePayload,
   detail: Args["detail"],
-  options: {
-    modelCachePath?: string;
-    useModelCache?: boolean;
-    refreshModelCache?: boolean;
-    shadowVerdictV2?: boolean;
-  } = {},
+  options: ModelRunOptions = {},
 ): Promise<{
   model: string;
   verdict: Verdict;

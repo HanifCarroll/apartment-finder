@@ -4,7 +4,7 @@ import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "../src/lib/con
 import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
 import { loadImageFromUrl } from "../src/lib/images";
-import { classifyWithModel } from "../src/openai-classifier";
+import { classifyWithModel, modelRunOptionsFromArgs } from "../src/openai-classifier";
 import { aggregateByPolicy, DEFAULT_LISTING_POLICY, listingConfidence, type ClassificationRecordLike } from "../src/listing/aggregation";
 import { runClassification } from "../src/classifier-runner";
 import { appendJsonl, writeJsonl } from "../src/lib/jsonl";
@@ -258,6 +258,7 @@ async function runSummaryFromExtraction(
 ): Promise<unknown[]> {
   const imageUrls = (extraction.image_urls || []).slice(0, args.maxImages);
   const client = new OpenAI();
+  const modelOptions = modelRunOptionsFromArgs(args);
   const records: unknown[] = [{
     ok: true,
     type: "listing_photo_extraction",
@@ -273,12 +274,7 @@ async function runSummaryFromExtraction(
   const firstPassRecords = await mapConcurrent(imageUrls, args.concurrency, async (imageUrl, index): Promise<unknown> => {
     try {
       const image = await loadImageFromUrl(imageUrl, DEFAULT_CACHE_DIR);
-      const result = await classifyWithModel(client, args.model, image, "auto", {
-        modelCachePath: args.modelCachePath,
-        useModelCache: args.useModelCache,
-        refreshModelCache: args.refreshModelCache,
-        shadowVerdictV2: args.shadowVerdictV2,
-      });
+      const result = await classifyWithModel(client, args.model, image, "auto", modelOptions);
       return imageRecord(image, result, {
         listing_url: listing.listing_url,
         listing_image_index: index,
@@ -310,12 +306,7 @@ async function runSummaryFromExtraction(
     const imageUrl = imageUrls[index];
     try {
       const image = await loadImageFromUrl(imageUrl, DEFAULT_CACHE_DIR);
-      const result = await classifyWithModel(client, args.escalationModel, image, "auto", {
-        modelCachePath: args.modelCachePath,
-        useModelCache: args.useModelCache,
-        refreshModelCache: args.refreshModelCache,
-        shadowVerdictV2: args.shadowVerdictV2,
-      });
+      const result = await classifyWithModel(client, args.escalationModel, image, "auto", modelOptions);
       return imageRecord(image, result, {
         listing_url: listing.listing_url,
         listing_image_index: index,
