@@ -3,7 +3,7 @@ import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, 
 import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "../src/lib/concurrency";
 import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
-import { loadImageFromUrl } from "../src/lib/images";
+import { loadImageFromPath, loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel, modelRunOptionsFromArgs } from "../src/openai-classifier";
 import { aggregateByPolicy, DEFAULT_LISTING_POLICY, listingConfidence, type ClassificationRecordLike } from "../src/listing/aggregation";
 import { runClassification } from "../src/classifier-runner";
@@ -25,6 +25,7 @@ type RunArgs = {
   fixturesPath: string;
   outPath: string;
   extractionResultsPath?: string;
+  fixtureImagesPath?: string;
   model: string;
   escalationModel: string;
   maxImages: number;
@@ -56,6 +57,7 @@ Options:
   --fixtures <path>          Listing fixture JSONL path. Defaults to fixtures/listings.jsonl.
   --out <path>               Write summary-run JSONL records. Defaults to results/listing-summary-run.jsonl.
   --extractions <path>       Optional prior result JSONL containing listing_photo_extraction records.
+  --fixture-images <path>    Optional local fixture image manifest from fixtures:download-images.
   --model <model>            First-pass model. Defaults to ${DEFAULT_MODEL}.
   --escalation-model <model> Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.
   --max-images <n>           Maximum photos per listing. Defaults to 35.
@@ -114,6 +116,11 @@ function parseArgs(argv: string[]): RunArgs {
       case "--extractions":
         if (!next) usage();
         args.extractionResultsPath = next;
+        i += 1;
+        break;
+      case "--fixture-images":
+        if (!next) usage();
+        args.fixtureImagesPath = next;
         i += 1;
         break;
       case "--model":
@@ -220,6 +227,16 @@ type ExtractionRecord = {
   gallery_count_matches_extracted?: boolean | null;
 };
 
+type FixtureImageRecord = {
+  type?: string;
+  ok?: boolean;
+  fixture_id?: string;
+  listing_url?: string;
+  listing_image_index?: number;
+  image_url?: string;
+  local_path?: string;
+};
+
 async function readExtractionCache(path?: string): Promise<Map<string, ExtractionRecord>> {
   const cache = new Map<string, ExtractionRecord>();
   if (!path) return cache;
@@ -230,6 +247,40 @@ async function readExtractionCache(path?: string): Promise<Map<string, Extractio
     }
   }
   return cache;
+}
+
+async function readFixtureImageManifest(path?: string): Promise<{
+  byId: Map<string, FixtureImageRecord[]>;
+  byUrl: Map<string, FixtureImageRecord[]>;
+}> {
+  const byId = new Map<string, FixtureImageRecord[]>();
+  const byUrl = new Map<string, FixtureImageRecord[]>();
+  if (!path) return { byId, byUrl };
+
+  const records = parseJsonl<FixtureImageRecord>(await readFile(path, "utf8"))
+    .filter((record) =>
+      record.type === "fixture_listing_image" &&
+      record.ok !== false &&
+      Boolean(record.local_path) &&
+      (Boolean(record.fixture_id) || Boolean(record.listing_url)),
+    )
+    .sort((a, b) => (a.listing_image_index ?? 0) - (b.listing_image_index ?? 0));
+
+  for (const record of records) {
+    if (record.fixture_id) {
+      const existing = byId.get(record.fixture_id) || [];
+      existing.push(record);
+      byId.set(record.fixture_id, existing);
+    }
+    if (record.listing_url) {
+      const key = normalizeListingUrl(record.listing_url);
+      const existing = byUrl.get(key) || [];
+      existing.push(record);
+      byUrl.set(key, existing);
+    }
+  }
+
+  return { byId, byUrl };
 }
 
 function imageRecord(
@@ -249,6 +300,136 @@ function imageRecord(
     },
     ...result,
   };
+}
+
+async function loadFixtureImage(record: FixtureImageRecord): Promise<ImagePayload> {
+  if (!record.local_path) throw new Error("fixture image local_path missing");
+  const image = await loadImageFromPath(record.local_path);
+  return {
+    ...image,
+    source: record.image_url || image.source,
+    cachedPath: record.local_path,
+  };
+}
+
+async function runSummaryFromFixtureImages(
+  listing: ListingFixture,
+  fixtureImages: FixtureImageRecord[],
+  args: RunArgs,
+): Promise<unknown[]> {
+  const images = fixtureImages.slice(0, args.maxImages);
+  const client = new OpenAI();
+  const modelOptions = modelRunOptionsFromArgs(args);
+  const imageUrls = images.map((image) => image.image_url || image.local_path || "");
+  const records: unknown[] = [{
+    ok: true,
+    type: "listing_photo_extraction",
+    created_at: new Date().toISOString(),
+    listing_url: listing.listing_url,
+    image_urls: imageUrls,
+    image_count: images.length,
+    gallery_count: null,
+    gallery_count_matches_extracted: null,
+    source: "fixture_images",
+  }];
+
+  const firstPassRecords = await mapConcurrent(images, args.concurrency, async (fixtureImage, index): Promise<unknown> => {
+    try {
+      const image = await loadFixtureImage(fixtureImage);
+      const result = await classifyWithModel(client, args.model, image, "auto", modelOptions);
+      return imageRecord(image, result, {
+        listing_url: listing.listing_url,
+        listing_image_index: fixtureImage.listing_image_index ?? index,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        created_at: new Date().toISOString(),
+        listing_url: listing.listing_url,
+        listing_image_index: fixtureImage.listing_image_index ?? index,
+        model: args.model,
+        image: { source: fixtureImage.image_url || fixtureImage.local_path },
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  records.push(...firstPassRecords);
+
+  const firstPassClassifications = firstPassRecords.filter((record): record is ClassificationRecordLike =>
+    Boolean(record && typeof record === "object" && "verdict" in record),
+  );
+  const firstPassAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, firstPassClassifications);
+  const escalationIndexes = selectEscalationIndexes(firstPassClassifications, firstPassAggregate, {
+    maxImages: args.maxEscalationImages,
+    broadGate: process.env.APARTMENT_FINDER_ESCALATION_GATE === "broad",
+  });
+  const fixtureImageByListingIndex = new Map<number, { fixtureImage: FixtureImageRecord; fallbackIndex: number }>();
+  images.forEach((fixtureImage, index) => {
+    fixtureImageByListingIndex.set(fixtureImage.listing_image_index ?? index, { fixtureImage, fallbackIndex: index });
+  });
+
+  const escalationRecords = await mapConcurrent(escalationIndexes, args.concurrency, async (recordIndex): Promise<unknown> => {
+    const match = fixtureImageByListingIndex.get(recordIndex);
+    if (!match) {
+      return {
+        ok: false,
+        created_at: new Date().toISOString(),
+        listing_url: listing.listing_url,
+        listing_image_index: recordIndex,
+        pass: "escalation",
+        model: args.escalationModel,
+        error: "fixture image missing for escalation index",
+      };
+    }
+    const { fixtureImage, fallbackIndex } = match;
+    try {
+      const image = await loadFixtureImage(fixtureImage);
+      const result = await classifyWithModel(client, args.escalationModel, image, "auto", modelOptions);
+      return imageRecord(image, result, {
+        listing_url: listing.listing_url,
+        listing_image_index: fixtureImage.listing_image_index ?? fallbackIndex,
+        pass: "escalation",
+        escalated_from_model: args.model,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        created_at: new Date().toISOString(),
+        listing_url: listing.listing_url,
+        listing_image_index: fixtureImage.listing_image_index ?? fallbackIndex,
+        pass: "escalation",
+        model: args.escalationModel,
+        image: { source: fixtureImage.image_url || fixtureImage.local_path },
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  records.push(...escalationRecords);
+
+  const finalRecords = [...firstPassClassifications, ...escalationRecords.filter((record): record is ClassificationRecordLike =>
+    Boolean(record && typeof record === "object" && "verdict" in record),
+  )];
+  const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
+  records.push({
+    ok: true,
+    type: "listing_summary",
+    created_at: new Date().toISOString(),
+    listing_url: listing.listing_url,
+    decision: finalAggregate.predictedLocation,
+    confidence: listingConfidence(finalAggregate),
+    policy: DEFAULT_LISTING_POLICY,
+    run_id: args.runId,
+    escalation_policy: DEFAULT_ESCALATION_POLICY,
+    max_escalation_images: args.maxEscalationImages,
+    first_pass_model: args.model,
+    escalation_model: args.escalationModel,
+    escalated_image_indexes: escalationIndexes,
+    image_count: images.length,
+    evidence: finalAggregate.evidence.slice(0, 8),
+    source: "fixture_images",
+  });
+
+  return records;
 }
 
 async function runSummaryFromExtraction(
@@ -362,10 +543,14 @@ async function main() {
 
   const listings = parseJsonl<ListingFixture>(await readFile(args.fixturesPath, "utf8"));
   const extractionCache = await readExtractionCache(args.extractionResultsPath);
+  const fixtureImages = await readFixtureImageManifest(args.fixtureImagesPath);
 
   const listingRecords = await mapConcurrent(listings, args.listingConcurrency, async (listing) => {
     console.log(`Summarizing ${listing.id} (${listing.expected_listing_location})`);
     const cachedExtraction = extractionCache.get(normalizeListingUrl(listing.listing_url));
+    const fixtureImageRecords =
+      fixtureImages.byId.get(listing.id) ||
+      fixtureImages.byUrl.get(normalizeListingUrl(listing.listing_url));
     const classificationArgs: Args = {
       listingUrl: listing.listing_url,
       models: [args.model],
@@ -390,9 +575,11 @@ async function main() {
       runId: args.runId,
     };
 
-    return await (cachedExtraction
-      ? runSummaryFromExtraction(listing, cachedExtraction, args)
-      : runClassification(classificationArgs)
+    return await (fixtureImageRecords?.length
+      ? runSummaryFromFixtureImages(listing, fixtureImageRecords, args)
+      : cachedExtraction
+        ? runSummaryFromExtraction(listing, cachedExtraction, args)
+        : runClassification(classificationArgs)
     ).catch((error) => [{
       ok: false,
       type: "listing_summary_run_failed",

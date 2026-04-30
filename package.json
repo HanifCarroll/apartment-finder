@@ -29,6 +29,7 @@
     "fixtures:candidates": "bun run scripts/build-fixture-candidates.ts",
     "fixtures:listing-evidence": "bun run scripts/build-listing-evidence-candidates.ts",
     "fixtures:promote": "bun run scripts/promote-reviewed-candidates.ts",
+    "fixtures:download-images": "bun run scripts/download-fixture-images.ts",
     "audit:extractions": "bun run scripts/audit-search-extractions.ts",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -160,6 +160,29 @@ Useful flags:
 
 The current v2 image verdict schema runs in shadow mode. It is derived from the accepted v1 verdict and stored in output evidence for analysis, but it does not change the listing decision yet.
 
+## Frozen Fixture Images
+
+Listings can disappear or change their galleries, so listing fixtures can be frozen to local image files:
+
+```sh
+bun run fixtures:download-images \
+  --fixtures fixtures/listings.jsonl \
+  --out fixtures/assets/listing-images.jsonl
+```
+
+The downloader reads cached listing extraction from `.apartment-laundry-cache/extractions.jsonl` by default. If you need fresh photo URLs or a fixture has no cached extraction, add `--refresh-extraction`.
+
+Run listing-summary evals against local image bytes with:
+
+```sh
+bun run summary:listings \
+  --fixtures fixtures/listings.jsonl \
+  --fixture-images fixtures/assets/listing-images.jsonl \
+  --out results/local-fixture-summary.jsonl
+```
+
+The manifest keeps the original remote image URL for evidence while loading the image bytes from `fixtures/assets/listings/...`, so reports remain readable and evals survive unpublished listings.
+
 ## Smoke Test Extraction
 
 Provider-specific smoke fixtures are in `fixtures/listings-<provider>.jsonl`.
