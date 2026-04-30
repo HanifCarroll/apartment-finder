@@ -3,8 +3,9 @@ function envPositiveInteger(name: string, fallback: number): number {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-export const DEFAULT_CONCURRENCY = envPositiveInteger("OPENAI_MODEL_CONCURRENCY", 10);
-export const DEFAULT_LISTING_CONCURRENCY = envPositiveInteger("LISTING_SCAN_CONCURRENCY", 10);
+export const DEFAULT_CONCURRENCY = envPositiveInteger("OPENAI_MODEL_CONCURRENCY", 25);
+export const DEFAULT_LISTING_CONCURRENCY = envPositiveInteger("LISTING_SCAN_CONCURRENCY", 20);
+export const DEFAULT_MODEL_CALLS_PER_MINUTE = envPositiveInteger("OPENAI_MODEL_CALLS_PER_MINUTE", 240);
 
 export async function mapConcurrent<T, R>(
   items: T[],
@@ -57,8 +58,32 @@ function createLimiter(concurrency: number) {
   };
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createPacer(callsPerMinute: number) {
+  const intervalMs = Math.ceil(60_000 / callsPerMinute);
+  let nextStartAt = 0;
+  let chain = Promise.resolve();
+
+  return async function pace(): Promise<void> {
+    chain = chain.then(async () => {
+      const now = Date.now();
+      const waitMs = Math.max(0, nextStartAt - now);
+      nextStartAt = Math.max(now, nextStartAt) + intervalMs;
+      if (waitMs > 0) await delay(waitMs);
+    });
+    return chain;
+  };
+}
+
 const limitModelCall = createLimiter(DEFAULT_CONCURRENCY);
+const paceModelCall = createPacer(DEFAULT_MODEL_CALLS_PER_MINUTE);
 
 export async function withGlobalModelCallSlot<T>(fn: () => Promise<T>): Promise<T> {
-  return limitModelCall(fn);
+  return limitModelCall(async () => {
+    await paceModelCall();
+    return fn();
+  });
 }

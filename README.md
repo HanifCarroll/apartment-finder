@@ -264,7 +264,7 @@ bun run dev
 
 Open `http://localhost:3000`. Web scans require `OPENAI_API_KEY`.
 
-The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=10` model calls and `LISTING_SCAN_CONCURRENCY=10` listing scans. This is chosen from observed response headers for the current key: requests are not the bottleneck, while `gpt-5.4-mini` token throughput is about 200k TPM and image calls are roughly 3.6k tokens each. OpenAI rate limits are account, project, and model specific, so override those env vars if `logs/app.log` shows different `limitTokens`/`remainingTokens` headroom.
+The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=25`, `LISTING_SCAN_CONCURRENCY=20`, and `OPENAI_MODEL_CALLS_PER_MINUTE=240`. This is chosen from observed Tier 2 response headers for the current key: requests are not the bottleneck, `gpt-5.4-mini` reports about 2M TPM, and `gpt-5.4` reports about 1M TPM. At 240 calls/minute, even older high-token image calls around 3.7k tokens remain under the lower `gpt-5.4` token ceiling. The call pacer prevents low-latency bursts from exceeding TPM even when concurrency is high. OpenAI rate limits are account, project, and model specific, so override those env vars if `logs/app.log` shows different `limitTokens`/`remainingTokens` headroom.
 
 Backend scan logs are written to `logs/app.log` by default. The log is JSONL and includes search discovery, extraction/cache, listing, batch, image-load, first-pass model, escalation, and summary timing events. Override with `APP_LOG_PATH=/path/to/app.log`.
 
@@ -286,7 +286,7 @@ Image labels live in `fixtures/images.jsonl`.
 ```sh
 bun run eval:fixtures \
   --models gpt-5.4-mini,gpt-5.4-nano \
-  --concurrency 10 \
+  --concurrency 25 \
   --out results/eval-fixtures.jsonl \
   --summary results/eval-fixtures-summary.json
 ```
@@ -300,8 +300,8 @@ bun run summary:listings \
   --model gpt-5.4-mini \
   --escalation-model gpt-5.4 \
   --max-images 35 \
-  --concurrency 10 \
-  --listing-concurrency 10
+  --concurrency 25 \
+  --listing-concurrency 20
 
 bun run eval:listing-summaries \
   --listings fixtures/listings.jsonl \
