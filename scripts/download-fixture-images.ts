@@ -6,7 +6,7 @@ import { extractListingImageUrls } from "../src/listing/extraction";
 import { DEFAULT_CONCURRENCY, mapConcurrent } from "../src/lib/concurrency";
 import { loadImageFromUrl } from "../src/lib/images";
 import { writeJsonl } from "../src/lib/jsonl";
-import type { LocationLabel } from "../src/types";
+import type { ListingExtraction, LocationLabel } from "../src/types";
 
 type ListingFixture = {
   id: string;
@@ -152,21 +152,28 @@ function manifestPath(path: string): string {
   return path.startsWith("/") ? relative(process.cwd(), path) : path;
 }
 
-async function imageUrlsForFixture(listing: ListingFixture, args: DownloadArgs): Promise<string[] | null> {
+async function extractionForFixture(listing: ListingFixture, args: DownloadArgs): Promise<ListingExtraction | null> {
   const cached = args.useExtractionCache
     ? await readCachedListingExtraction(args.extractionCachePath, listing.listing_url)
     : null;
-  if (cached?.image_urls.length && !args.refreshExtraction) return cached.image_urls.slice(0, args.maxImages);
+  if (cached?.image_urls.length && !args.refreshExtraction) {
+    const imageUrls = cached.image_urls.slice(0, args.maxImages);
+    return {
+      ...cached,
+      image_urls: imageUrls,
+      gallery_count_matches_extracted:
+        cached.gallery_count === null ? null : cached.gallery_count === imageUrls.length,
+    };
+  }
 
   if (!args.refreshExtraction) return null;
 
-  const extraction = await extractListingImageUrls(listing.listing_url, {
+  return await extractListingImageUrls(listing.listing_url, {
     maxImages: args.maxImages,
     useExtractionCache: args.useExtractionCache,
     refreshExtraction: args.refreshExtraction,
     extractionCachePath: args.extractionCachePath,
   });
-  return extraction.image_urls.slice(0, args.maxImages);
 }
 
 async function main() {
@@ -178,14 +185,24 @@ async function main() {
 
   for (const listing of listings) {
     console.log(`Resolving ${listing.id}`);
-    const imageUrls = await imageUrlsForFixture(listing, args);
-    if (!imageUrls?.length) {
+    const extraction = await extractionForFixture(listing, args);
+    if (!extraction?.image_urls.length) {
       skipped += 1;
       console.warn(`Skipping ${listing.id}: no cached extraction. Re-run with --refresh-extraction to fetch live URLs.`);
       continue;
     }
 
-    const listingRecords = await mapConcurrent(imageUrls, args.concurrency, async (imageUrl, index) => {
+    records.push({
+      ok: true,
+      type: "fixture_listing_extraction",
+      created_at: new Date().toISOString(),
+      fixture_id: listing.id,
+      expected_listing_location: listing.expected_listing_location,
+      ...extraction,
+      image_count: extraction.image_urls.length,
+    });
+
+    const listingRecords = await mapConcurrent(extraction.image_urls, args.concurrency, async (imageUrl, index) => {
       try {
         const image = await loadImageFromUrl(imageUrl, args.cacheDir);
         if (!image.cachedPath) throw new Error("download cache path missing");

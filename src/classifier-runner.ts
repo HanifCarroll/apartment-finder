@@ -5,12 +5,14 @@ import { logger } from "./lib/logger";
 import {
   DEFAULT_LISTING_POLICY,
   aggregateByPolicy,
+  isStrongEvidence,
   listingConfidence,
+  type ListingAggregate,
   type ClassificationRecordLike,
 } from "./listing/aggregation";
 import { DEFAULT_ESCALATION_POLICY, selectEscalationIndexes } from "./listing/escalation";
 import { extractListingImageUrls } from "./listing/extraction";
-import { classifyWithModel, modelRunOptionsFromArgs } from "./openai-classifier";
+import { classifyWithModel, modelRunOptionsFromArgs, type ModelRunOptions } from "./openai-classifier";
 import type { Args, ImagePayload, Verdict } from "./types";
 
 const STAGED_BATCH_SIZE = 6;
@@ -32,9 +34,9 @@ async function classifyImagePayload(
   image: ImagePayload,
   args: Args,
   extra: Record<string, unknown> = {},
+  modelOptions: ModelRunOptions = modelRunOptionsFromArgs(args),
 ): Promise<unknown[]> {
   const records = [];
-  const modelOptions = modelRunOptionsFromArgs(args);
 
   for (const model of args.models) {
     try {
@@ -105,12 +107,58 @@ function airbnbAmenityDecision(extraction: {
   return null;
 }
 
+function listingWasherText(extraction: Awaited<ReturnType<typeof extractListingImageUrls>>): string {
+  const amenityText = (extraction.listing_amenities || [])
+    .flatMap((group) => [group.group, ...group.items])
+    .join(" ");
+  return [
+    extraction.listing_title,
+    extraction.listing_description,
+    extraction.listing_price_text,
+    extraction.listing_expenses_text,
+    extraction.listing_features?.join(" "),
+    amenityText,
+  ].filter(Boolean).join(" ");
+}
+
+function hasNonAirbnbWasherText(extraction: Awaited<ReturnType<typeof extractListingImageUrls>>): boolean {
+  if (extraction.provider === "airbnb") return false;
+  const text = listingWasherText(extraction).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  return /\b(lavarropas?|lavasecarropas?|lavadero|lavanderia|laundry|washer|washing machine)\b/.test(text);
+}
+
+function textGuidedVisionDecision(aggregate: ListingAggregate, enabled: boolean): {
+  decision: ListingAggregate["predictedLocation"];
+  confidence: ReturnType<typeof listingConfidence>;
+  source: "vision" | "text_guided_vision";
+} {
+  const confidence = listingConfidence(aggregate);
+  if (!enabled) {
+    return { decision: aggregate.predictedLocation, confidence, source: "vision" };
+  }
+
+  const strongInUnit = aggregate.evidence.filter((item) => isStrongEvidence(item, "IN_UNIT"));
+  if (strongInUnit.length === 0) {
+    return { decision: aggregate.predictedLocation, confidence, source: "vision" };
+  }
+
+  return {
+    decision: "IN_UNIT",
+    confidence: strongInUnit.some((item) => item.confidence >= 0.95) ? "high" : "medium",
+    source: "text_guided_vision",
+  };
+}
+
 function listingSummaryRecord(args: Args, extraction: Awaited<ReturnType<typeof extractListingImageUrls>>, values: {
   decision: string;
   confidence: string;
   decisionSource: string;
   visionDecision?: string;
   visionConfidence?: string;
+  textGuidedFullGallery?: boolean;
+  classifiedImageCount?: number;
+  classificationErrorCount?: number;
+  incomplete?: boolean;
   escalatedImageIndexes?: number[];
   evidence?: ClassificationRecordLike[];
 }) {
@@ -124,8 +172,13 @@ function listingSummaryRecord(args: Args, extraction: Awaited<ReturnType<typeof 
     decision_source: values.decisionSource,
     vision_decision: values.visionDecision,
     vision_confidence: values.visionConfidence,
+    text_guided_full_gallery: values.textGuidedFullGallery || undefined,
+    classified_image_count: values.classifiedImageCount,
+    classification_error_count: values.classificationErrorCount,
+    incomplete: values.incomplete || undefined,
     airbnb_laundry_amenity_label: extraction.airbnb_laundry_amenity_label,
     airbnb_laundry_amenity_text: extraction.airbnb_laundry_amenity_text,
+    metadata_laundry_signals: extraction.metadata_laundry_signals,
     policy: DEFAULT_LISTING_POLICY,
     run_id: args.runId,
     escalation_policy: DEFAULT_ESCALATION_POLICY,
@@ -188,8 +241,18 @@ async function classifyListing(args: Args): Promise<unknown[]> {
     }));
     return records;
   }
+  const textGuidedFullGallery = args.listingSummary && hasNonAirbnbWasherText(extraction);
 
   const client = new OpenAI();
+  const modelOptions = {
+    ...modelRunOptionsFromArgs(args),
+    ...(textGuidedFullGallery
+      ? {
+        promptContextKey: "non-airbnb-washer-text-v1",
+        promptContext: "The listing text mentions a washer/lavarropas. The text is not a classification signal; inspect the photo carefully and classify only visible washer evidence.",
+      }
+      : {}),
+  };
 
   const classifyImageUrl = async (imageUrl: string, index: number): Promise<unknown[]> => {
     try {
@@ -209,7 +272,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
       const imageRecords = await classifyImagePayload(client, image, args, {
         listing_url: args.listingUrl,
         listing_image_index: index,
-      });
+      }, modelOptions);
       logger.info({
         event: "image_phase_finished",
         phase: "classify_first_pass",
@@ -304,7 +367,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
               durationMs: Math.round(performance.now() - imageLoadStartedAt),
             });
             const escalationImageStartedAt = performance.now();
-            const result = await classifyWithModel(client, args.escalationModel, image, args.detail, modelRunOptionsFromArgs(args));
+            const result = await classifyWithModel(client, args.escalationModel, image, args.detail, modelOptions);
             logger.info({
               event: "image_phase_finished",
               phase: "classify_escalation",
@@ -350,12 +413,30 @@ async function classifyListing(args: Args): Promise<unknown[]> {
       )];
       const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
       const finalConfidence = listingConfidence(finalAggregate);
+      const classifiedImageCount = new Set(finalRecords.map((record) => record.listing_image_index).filter((index) => index !== undefined)).size;
+      const classificationErrorCount = records.filter((record) =>
+        Boolean(record && typeof record === "object" && "error" in record && (record as { listing_image_index?: number }).listing_image_index !== undefined)
+      ).length + escalationRecords.filter((record) =>
+        Boolean(record && typeof record === "object" && "error" in record && (record as { listing_image_index?: number }).listing_image_index !== undefined)
+      ).length;
+      const incomplete = classificationErrorCount > 0 || classifiedImageCount < extraction.image_urls.length;
+      const guidedDecision = textGuidedVisionDecision(finalAggregate, textGuidedFullGallery);
+      const outputDecision = incomplete && finalAggregate.evidence.length === 0
+        ? { decision: finalAggregate.predictedLocation, confidence: "low" as const, source: "vision_incomplete" as const }
+        : guidedDecision;
       logger.info({
         event: "listing_phase_finished",
         phase: "summary_final",
         listingUrl: args.listingUrl,
-        decision: finalAggregate.predictedLocation,
-        confidence: finalConfidence,
+        decision: outputDecision.decision,
+        confidence: outputDecision.confidence,
+        visionDecision: finalAggregate.predictedLocation,
+        visionConfidence: finalConfidence,
+        decisionSource: outputDecision.source,
+        textGuidedFullGallery,
+        classifiedImageCount,
+        classificationErrorCount,
+        incomplete,
         evidenceCount: finalAggregate.evidence.length,
         durationMs: Math.round(performance.now() - finalStartedAt),
       });
@@ -363,11 +444,15 @@ async function classifyListing(args: Args): Promise<unknown[]> {
       return {
         escalationRecords,
         summary: listingSummaryRecord(args, extraction, {
-          decision: finalAggregate.predictedLocation,
-          confidence: finalConfidence,
-          decisionSource: "vision",
+          decision: outputDecision.decision,
+          confidence: outputDecision.confidence,
+          decisionSource: outputDecision.source,
           visionDecision: finalAggregate.predictedLocation,
           visionConfidence: finalConfidence,
+          textGuidedFullGallery,
+          classifiedImageCount,
+          classificationErrorCount,
+          incomplete,
           escalatedImageIndexes: escalationIndexes,
           evidence: finalAggregate.evidence,
         }),
@@ -391,7 +476,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         const decision = candidateSummary.summary.decision;
         const confidence = candidateSummary.summary.confidence;
 
-        if ((decision === "IN_UNIT" || decision === "SHARED_BUILDING") && confidence === "high") {
+        if (!textGuidedFullGallery && (decision === "IN_UNIT" || decision === "SHARED_BUILDING") && confidence === "high") {
           const finalSummary = await buildSummary(firstPassRecords, classifiedIndexes, { performEscalation: true });
           records.push(...finalSummary.escalationRecords);
           records.push(finalSummary.summary);

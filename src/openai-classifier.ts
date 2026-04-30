@@ -17,6 +17,8 @@ export type ModelRunOptions = {
   useModelCache?: boolean;
   refreshModelCache?: boolean;
   shadowVerdictV2?: boolean;
+  promptContextKey?: string;
+  promptContext?: string;
 };
 
 export function modelRunOptionsFromArgs(args: Pick<Args,
@@ -49,6 +51,15 @@ Do not count wall-mounted boilers, water heaters, calefones, termotanques, dishw
 Be conservative about IN_UNIT. If a photo only shows a washer close-up with no room context, use UNKNOWN unless there are clear private-unit or shared-laundry signals. Keep confidence between 0 and 1.`;
 }
 
+function contextualClassificationPrompt(options: ModelRunOptions): string {
+  if (!options.promptContext) return classificationPrompt();
+  return `${classificationPrompt()}
+
+Context: ${options.promptContext}
+
+Use the context only to inspect the image more carefully. Do not report a washing machine unless washer-specific visual evidence is visible in this image.`;
+}
+
 function readRateLimitHeaders(response: Response): Record<string, string> {
   return Object.fromEntries(
     Array.from(response.headers.entries()).filter(([name]) => name.startsWith("x-ratelimit-")),
@@ -77,6 +88,7 @@ export async function classifyWithModel(
     imageSha256: image.sha256,
     promptVersion: CLASSIFICATION_PROMPT_VERSION,
     schemaVersion: CLASSIFICATION_SCHEMA_VERSION,
+    promptContextKey: options.promptContextKey,
   };
   if (options.useModelCache && options.modelCachePath && !options.refreshModelCache) {
     const cached = await readCachedModelResult(options.modelCachePath, cacheInput);
@@ -112,7 +124,7 @@ export async function classifyWithModel(
           {
             role: "user",
             content: [
-              { type: "input_text", text: classificationPrompt() },
+              { type: "input_text", text: contextualClassificationPrompt(options) },
               {
                 type: "input_image",
                 image_url: image.dataUrl,

@@ -1,11 +1,18 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "../src/lib/concurrency";
 import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
 import { loadImageFromPath, loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel, modelRunOptionsFromArgs } from "../src/openai-classifier";
-import { aggregateByPolicy, DEFAULT_LISTING_POLICY, listingConfidence, type ClassificationRecordLike } from "../src/listing/aggregation";
+import {
+  aggregateByPolicy,
+  DEFAULT_LISTING_POLICY,
+  isStrongEvidence,
+  listingConfidence,
+  type ClassificationRecordLike,
+  type ListingAggregate,
+} from "../src/listing/aggregation";
 import { runClassification } from "../src/classifier-runner";
 import { appendJsonl, writeJsonl } from "../src/lib/jsonl";
 import {
@@ -13,7 +20,7 @@ import {
   DEFAULT_MAX_ESCALATION_IMAGES,
   selectEscalationIndexes,
 } from "../src/listing/escalation";
-import type { Args, ImagePayload, LocationLabel } from "../src/types";
+import type { Args, ImagePayload, ListingExtraction, LocationLabel } from "../src/types";
 
 type ListingFixture = {
   id: string;
@@ -60,7 +67,7 @@ Options:
   --fixture-images <path>    Optional local fixture image manifest from fixtures:download-images.
   --model <model>            First-pass model. Defaults to ${DEFAULT_MODEL}.
   --escalation-model <model> Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.
-  --max-images <n>           Maximum photos per listing. Defaults to 35.
+  --max-images <n>           Maximum photos per listing. Defaults to ${DEFAULT_MAX_IMAGES}.
   --max-escalation-images <n> Maximum photos to escalate per listing. Defaults to ${DEFAULT_MAX_ESCALATION_IMAGES}.
   --concurrency <n>          Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.
   --listing-concurrency <n>  Concurrent fixture listings. Defaults to ${DEFAULT_LISTING_CONCURRENCY}.
@@ -82,7 +89,7 @@ function parseArgs(argv: string[]): RunArgs {
     outPath: "results/listing-summary-run.jsonl",
     model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
-    maxImages: 35,
+    maxImages: DEFAULT_MAX_IMAGES,
     maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
     concurrency: DEFAULT_CONCURRENCY,
     listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
@@ -220,12 +227,15 @@ function normalizeListingUrl(url: string): string {
 
 type ExtractionRecord = {
   type?: string;
+  ok?: boolean;
+  created_at?: string;
   listing_url?: string;
   image_urls?: string[];
   image_count?: number;
   gallery_count?: number | null;
   gallery_count_matches_extracted?: boolean | null;
-};
+  source?: string;
+} & Partial<ListingExtraction>;
 
 type FixtureImageRecord = {
   type?: string;
@@ -237,12 +247,47 @@ type FixtureImageRecord = {
   local_path?: string;
 };
 
+type FixtureExtractionRecord = {
+  type?: string;
+  ok?: boolean;
+  fixture_id?: string;
+} & ExtractionRecord;
+
+function isFixtureImageRecord(record: FixtureImageRecord | FixtureExtractionRecord): record is FixtureImageRecord {
+  const maybeImage = record as FixtureImageRecord;
+  return record.type === "fixture_listing_image" &&
+    record.ok !== false &&
+    Boolean(maybeImage.local_path) &&
+    (Boolean(record.fixture_id) || Boolean(record.listing_url));
+}
+
 async function readExtractionCache(path?: string): Promise<Map<string, ExtractionRecord>> {
   const cache = new Map<string, ExtractionRecord>();
   if (!path) return cache;
-  const records = parseJsonl<ExtractionRecord>(await readFile(path, "utf8"));
+  let text = "";
+  try {
+    text = await readFile(path, "utf8");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      return cache;
+    }
+    throw error;
+  }
+  const records = parseJsonl<ExtractionRecord>(text);
   for (const record of records) {
-    if (record.type === "listing_photo_extraction" && record.listing_url && record.image_urls?.length) {
+    if (
+      (
+        record.type === "listing_photo_extraction" ||
+        record.type === "listing_photo_extraction_cache" ||
+        record.type === "fixture_listing_extraction"
+      ) &&
+      record.listing_url &&
+      record.image_urls?.length
+    ) {
       cache.set(normalizeListingUrl(record.listing_url), record);
     }
   }
@@ -252,18 +297,27 @@ async function readExtractionCache(path?: string): Promise<Map<string, Extractio
 async function readFixtureImageManifest(path?: string): Promise<{
   byId: Map<string, FixtureImageRecord[]>;
   byUrl: Map<string, FixtureImageRecord[]>;
+  extractionsById: Map<string, FixtureExtractionRecord>;
+  extractionsByUrl: Map<string, FixtureExtractionRecord>;
 }> {
   const byId = new Map<string, FixtureImageRecord[]>();
   const byUrl = new Map<string, FixtureImageRecord[]>();
-  if (!path) return { byId, byUrl };
+  const extractionsById = new Map<string, FixtureExtractionRecord>();
+  const extractionsByUrl = new Map<string, FixtureExtractionRecord>();
+  if (!path) return { byId, byUrl, extractionsById, extractionsByUrl };
 
-  const records = parseJsonl<FixtureImageRecord>(await readFile(path, "utf8"))
-    .filter((record) =>
-      record.type === "fixture_listing_image" &&
-      record.ok !== false &&
-      Boolean(record.local_path) &&
-      (Boolean(record.fixture_id) || Boolean(record.listing_url)),
-    )
+  const allRecords = parseJsonl<FixtureImageRecord | FixtureExtractionRecord>(await readFile(path, "utf8"));
+  for (const record of allRecords) {
+    if (record.type !== "fixture_listing_extraction" || record.ok === false || !record.listing_url) continue;
+    const extractionRecord = record as FixtureExtractionRecord;
+    if (extractionRecord.fixture_id) {
+      extractionsById.set(extractionRecord.fixture_id, extractionRecord);
+    }
+    extractionsByUrl.set(normalizeListingUrl(extractionRecord.listing_url!), extractionRecord);
+  }
+
+  const records = allRecords
+    .filter(isFixtureImageRecord)
     .sort((a, b) => (a.listing_image_index ?? 0) - (b.listing_image_index ?? 0));
 
   for (const record of records) {
@@ -280,7 +334,149 @@ async function readFixtureImageManifest(path?: string): Promise<{
     }
   }
 
-  return { byId, byUrl };
+  return { byId, byUrl, extractionsById, extractionsByUrl };
+}
+
+function detectProvider(listingUrl: string): ListingExtraction["provider"] {
+  const host = new URL(listingUrl).hostname;
+  if (host.includes("zonaprop.com")) return "zonaprop";
+  if (host.includes("argenprop.com")) return "argenprop";
+  if (host.includes("airbnb.com")) return "airbnb";
+  return undefined;
+}
+
+function buildSyntheticExtraction(
+  listing: ListingFixture,
+  imageUrls: string[],
+  source: string,
+  metadata?: ExtractionRecord,
+): ExtractionRecord {
+  return {
+    ...metadata,
+    ok: true,
+    type: "listing_photo_extraction",
+    created_at: new Date().toISOString(),
+    listing_url: listing.listing_url,
+    provider: metadata?.provider || detectProvider(listing.listing_url),
+    page_url: metadata?.page_url || listing.listing_url,
+    image_urls: imageUrls,
+    image_count: imageUrls.length,
+    gallery_count: metadata?.gallery_count ?? null,
+    gallery_count_matches_extracted: metadata?.gallery_count_matches_extracted ?? null,
+    clicked_gallery: metadata?.clicked_gallery ?? false,
+    gallery_text: metadata?.gallery_text ?? "",
+    extraction_source: "cache",
+    source,
+  };
+}
+
+function airbnbAmenityDecision(extraction: {
+  provider?: string;
+  airbnb_laundry_amenity_label?: string;
+}): "IN_UNIT" | "SHARED_BUILDING" | null {
+  if (extraction.provider !== "airbnb") return null;
+  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_UNIT") return "IN_UNIT";
+  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_BUILDING") return "SHARED_BUILDING";
+  return null;
+}
+
+function listingWasherText(extraction: ExtractionRecord): string {
+  const amenityText = (extraction.listing_amenities || [])
+    .flatMap((group) => [group.group, ...group.items])
+    .join(" ");
+  return [
+    extraction.listing_title,
+    extraction.listing_description,
+    extraction.listing_price_text,
+    extraction.listing_expenses_text,
+    extraction.listing_features?.join(" "),
+    amenityText,
+  ].filter(Boolean).join(" ");
+}
+
+function hasNonAirbnbWasherText(extraction: ExtractionRecord): boolean {
+  if (extraction.provider === "airbnb") return false;
+  const text = listingWasherText(extraction).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  return /\b(lavarropas?|lavasecarropas?|lavadero|lavanderia|laundry|washer|washing machine)\b/.test(text);
+}
+
+function textGuidedVisionDecision(aggregate: ListingAggregate, enabled: boolean): {
+  decision: ListingAggregate["predictedLocation"];
+  confidence: ReturnType<typeof listingConfidence>;
+  source: "vision" | "text_guided_vision";
+} {
+  const confidence = listingConfidence(aggregate);
+  if (!enabled) return { decision: aggregate.predictedLocation, confidence, source: "vision" };
+
+  const strongInUnit = aggregate.evidence.filter((item) => isStrongEvidence(item, "IN_UNIT"));
+  if (strongInUnit.length === 0) return { decision: aggregate.predictedLocation, confidence, source: "vision" };
+
+  return {
+    decision: "IN_UNIT",
+    confidence: strongInUnit.some((item) => item.confidence >= 0.95) ? "high" : "medium",
+    source: "text_guided_vision",
+  };
+}
+
+function textGuidedModelOptions(args: RunArgs, enabled: boolean) {
+  return {
+    ...modelRunOptionsFromArgs(args),
+    ...(enabled
+      ? {
+        promptContextKey: "non-airbnb-washer-text-v1",
+        promptContext: "The listing text mentions a washer/lavarropas. The text is not a classification signal; inspect the photo carefully and classify only visible washer evidence.",
+      }
+      : {}),
+  };
+}
+
+function listingSummaryRecord(
+  listing: ListingFixture,
+  extraction: ExtractionRecord,
+  args: RunArgs,
+  values: {
+    decision: string;
+    confidence: string;
+    decisionSource: string;
+    visionDecision?: string;
+    visionConfidence?: string;
+    textGuidedFullGallery?: boolean;
+    classifiedImageCount?: number;
+    classificationErrorCount?: number;
+    incomplete?: boolean;
+    escalatedImageIndexes?: number[];
+    evidence?: ClassificationRecordLike[];
+    source: string;
+  },
+) {
+  return {
+    ok: true,
+    type: "listing_summary",
+    created_at: new Date().toISOString(),
+    listing_url: listing.listing_url,
+    decision: values.decision,
+    confidence: values.confidence,
+    decision_source: values.decisionSource,
+    vision_decision: values.visionDecision,
+    vision_confidence: values.visionConfidence,
+    text_guided_full_gallery: values.textGuidedFullGallery || undefined,
+    classified_image_count: values.classifiedImageCount,
+    classification_error_count: values.classificationErrorCount,
+    incomplete: values.incomplete || undefined,
+    airbnb_laundry_amenity_label: extraction.airbnb_laundry_amenity_label,
+    airbnb_laundry_amenity_text: extraction.airbnb_laundry_amenity_text,
+    metadata_laundry_signals: extraction.metadata_laundry_signals,
+    policy: DEFAULT_LISTING_POLICY,
+    run_id: args.runId,
+    escalation_policy: DEFAULT_ESCALATION_POLICY,
+    max_escalation_images: args.maxEscalationImages,
+    first_pass_model: args.model,
+    escalation_model: args.escalationModel,
+    escalated_image_indexes: values.escalatedImageIndexes || [],
+    image_count: extraction.image_urls?.length ?? 0,
+    evidence: (values.evidence || []).slice(0, 8),
+    source: values.source,
+  };
 }
 
 function imageRecord(
@@ -315,23 +511,29 @@ async function loadFixtureImage(record: FixtureImageRecord): Promise<ImagePayloa
 async function runSummaryFromFixtureImages(
   listing: ListingFixture,
   fixtureImages: FixtureImageRecord[],
+  metadataExtraction: ExtractionRecord | undefined,
   args: RunArgs,
 ): Promise<unknown[]> {
   const images = fixtureImages.slice(0, args.maxImages);
   const client = new OpenAI();
-  const modelOptions = modelRunOptionsFromArgs(args);
   const imageUrls = images.map((image) => image.image_url || image.local_path || "");
-  const records: unknown[] = [{
-    ok: true,
-    type: "listing_photo_extraction",
-    created_at: new Date().toISOString(),
-    listing_url: listing.listing_url,
-    image_urls: imageUrls,
-    image_count: images.length,
-    gallery_count: null,
-    gallery_count_matches_extracted: null,
-    source: "fixture_images",
-  }];
+  const extraction = buildSyntheticExtraction(listing, imageUrls, "fixture_images", metadataExtraction);
+  const records: unknown[] = [extraction];
+
+  const amenityDecision = airbnbAmenityDecision(extraction);
+  if (amenityDecision) {
+    records.push(listingSummaryRecord(listing, extraction, args, {
+      decision: amenityDecision,
+      confidence: "high",
+      decisionSource: "airbnb_amenity",
+      escalatedImageIndexes: [],
+      evidence: [],
+      source: "fixture_images",
+    }));
+    return records;
+  }
+  const textGuidedFullGallery = hasNonAirbnbWasherText(extraction);
+  const modelOptions = textGuidedModelOptions(args, textGuidedFullGallery);
 
   const firstPassRecords = await mapConcurrent(images, args.concurrency, async (fixtureImage, index): Promise<unknown> => {
     try {
@@ -410,24 +612,30 @@ async function runSummaryFromFixtureImages(
     Boolean(record && typeof record === "object" && "verdict" in record),
   )];
   const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
-  records.push({
-    ok: true,
-    type: "listing_summary",
-    created_at: new Date().toISOString(),
-    listing_url: listing.listing_url,
-    decision: finalAggregate.predictedLocation,
-    confidence: listingConfidence(finalAggregate),
-    policy: DEFAULT_LISTING_POLICY,
-    run_id: args.runId,
-    escalation_policy: DEFAULT_ESCALATION_POLICY,
-    max_escalation_images: args.maxEscalationImages,
-    first_pass_model: args.model,
-    escalation_model: args.escalationModel,
-    escalated_image_indexes: escalationIndexes,
-    image_count: images.length,
+  const finalConfidence = listingConfidence(finalAggregate);
+  const classifiedImageCount = new Set(finalRecords.map((record) => record.listing_image_index).filter((index) => index !== undefined)).size;
+  const classificationErrorCount = records.filter((record) =>
+    Boolean(record && typeof record === "object" && "error" in record && (record as { listing_image_index?: number }).listing_image_index !== undefined)
+  ).length;
+  const incomplete = classificationErrorCount > 0 || classifiedImageCount < images.length;
+  const guidedDecision = textGuidedVisionDecision(finalAggregate, textGuidedFullGallery);
+  const outputDecision = incomplete && finalAggregate.evidence.length === 0
+    ? { decision: finalAggregate.predictedLocation, confidence: "low" as const, source: "vision_incomplete" as const }
+    : guidedDecision;
+  records.push(listingSummaryRecord(listing, extraction, args, {
+    decision: outputDecision.decision,
+    confidence: outputDecision.confidence,
+    decisionSource: outputDecision.source,
+    visionDecision: finalAggregate.predictedLocation,
+    visionConfidence: finalConfidence,
+    textGuidedFullGallery,
+    classifiedImageCount,
+    classificationErrorCount,
+    incomplete,
+    escalatedImageIndexes: escalationIndexes,
     evidence: finalAggregate.evidence.slice(0, 8),
     source: "fixture_images",
-  });
+  }));
 
   return records;
 }
@@ -439,18 +647,23 @@ async function runSummaryFromExtraction(
 ): Promise<unknown[]> {
   const imageUrls = (extraction.image_urls || []).slice(0, args.maxImages);
   const client = new OpenAI();
-  const modelOptions = modelRunOptionsFromArgs(args);
-  const records: unknown[] = [{
-    ok: true,
-    type: "listing_photo_extraction",
-    created_at: new Date().toISOString(),
-    listing_url: listing.listing_url,
-    image_urls: imageUrls,
-    image_count: imageUrls.length,
-    gallery_count: extraction.gallery_count ?? null,
-    gallery_count_matches_extracted: extraction.gallery_count_matches_extracted ?? null,
-    source: "cached_extraction",
-  }];
+  const syntheticExtraction = buildSyntheticExtraction(listing, imageUrls, "cached_extraction", extraction);
+  const records: unknown[] = [syntheticExtraction];
+
+  const amenityDecision = airbnbAmenityDecision(syntheticExtraction);
+  if (amenityDecision) {
+    records.push(listingSummaryRecord(listing, syntheticExtraction, args, {
+      decision: amenityDecision,
+      confidence: "high",
+      decisionSource: "airbnb_amenity",
+      escalatedImageIndexes: [],
+      evidence: [],
+      source: "cached_extraction",
+    }));
+    return records;
+  }
+  const textGuidedFullGallery = hasNonAirbnbWasherText(syntheticExtraction);
+  const modelOptions = textGuidedModelOptions(args, textGuidedFullGallery);
 
   const firstPassRecords = await mapConcurrent(imageUrls, args.concurrency, async (imageUrl, index): Promise<unknown> => {
     try {
@@ -513,24 +726,30 @@ async function runSummaryFromExtraction(
     Boolean(record && typeof record === "object" && "verdict" in record),
   )];
   const finalAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, finalRecords);
-  records.push({
-    ok: true,
-    type: "listing_summary",
-    created_at: new Date().toISOString(),
-    listing_url: listing.listing_url,
-    decision: finalAggregate.predictedLocation,
-    confidence: listingConfidence(finalAggregate),
-    policy: DEFAULT_LISTING_POLICY,
-    run_id: args.runId,
-    escalation_policy: DEFAULT_ESCALATION_POLICY,
-    max_escalation_images: args.maxEscalationImages,
-    first_pass_model: args.model,
-    escalation_model: args.escalationModel,
-    escalated_image_indexes: escalationIndexes,
-    image_count: imageUrls.length,
+  const finalConfidence = listingConfidence(finalAggregate);
+  const classifiedImageCount = new Set(finalRecords.map((record) => record.listing_image_index).filter((index) => index !== undefined)).size;
+  const classificationErrorCount = records.filter((record) =>
+    Boolean(record && typeof record === "object" && "error" in record && (record as { listing_image_index?: number }).listing_image_index !== undefined)
+  ).length;
+  const incomplete = classificationErrorCount > 0 || classifiedImageCount < imageUrls.length;
+  const guidedDecision = textGuidedVisionDecision(finalAggregate, textGuidedFullGallery);
+  const outputDecision = incomplete && finalAggregate.evidence.length === 0
+    ? { decision: finalAggregate.predictedLocation, confidence: "low" as const, source: "vision_incomplete" as const }
+    : guidedDecision;
+  records.push(listingSummaryRecord(listing, syntheticExtraction, args, {
+    decision: outputDecision.decision,
+    confidence: outputDecision.confidence,
+    decisionSource: outputDecision.source,
+    visionDecision: finalAggregate.predictedLocation,
+    visionConfidence: finalConfidence,
+    textGuidedFullGallery,
+    classifiedImageCount,
+    classificationErrorCount,
+    incomplete,
+    escalatedImageIndexes: escalationIndexes,
     evidence: finalAggregate.evidence.slice(0, 8),
     source: "cached_extraction",
-  });
+  }));
 
   return records;
 }
@@ -542,15 +761,23 @@ async function main() {
   }
 
   const listings = parseJsonl<ListingFixture>(await readFile(args.fixturesPath, "utf8"));
-  const extractionCache = await readExtractionCache(args.extractionResultsPath);
+  const extractionResultsCache = await readExtractionCache(args.extractionResultsPath);
+  const defaultExtractionCache = args.useExtractionCache
+    ? await readExtractionCache(args.extractionCachePath)
+    : new Map<string, ExtractionRecord>();
   const fixtureImages = await readFixtureImageManifest(args.fixtureImagesPath);
 
   const listingRecords = await mapConcurrent(listings, args.listingConcurrency, async (listing) => {
     console.log(`Summarizing ${listing.id} (${listing.expected_listing_location})`);
-    const cachedExtraction = extractionCache.get(normalizeListingUrl(listing.listing_url));
+    const cacheKey = normalizeListingUrl(listing.listing_url);
+    const cachedExtraction =
+      fixtureImages.extractionsById.get(listing.id) ||
+      fixtureImages.extractionsByUrl.get(cacheKey) ||
+      extractionResultsCache.get(cacheKey) ||
+      defaultExtractionCache.get(cacheKey);
     const fixtureImageRecords =
       fixtureImages.byId.get(listing.id) ||
-      fixtureImages.byUrl.get(normalizeListingUrl(listing.listing_url));
+      fixtureImages.byUrl.get(cacheKey);
     const classificationArgs: Args = {
       listingUrl: listing.listing_url,
       models: [args.model],
@@ -576,7 +803,7 @@ async function main() {
     };
 
     return await (fixtureImageRecords?.length
-      ? runSummaryFromFixtureImages(listing, fixtureImageRecords, args)
+      ? runSummaryFromFixtureImages(listing, fixtureImageRecords, cachedExtraction, args)
       : cachedExtraction
         ? runSummaryFromExtraction(listing, cachedExtraction, args)
         : runClassification(classificationArgs)

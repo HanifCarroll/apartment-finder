@@ -78,14 +78,18 @@ best_url: https://a0.muscache.com/im/pictures/...
 
 For Airbnb listings, explicit page amenities override the vision aggregate when they distinguish location. `Washer - in unit` becomes `IN_UNIT`; `Washer - in building` becomes `SHARED_BUILDING`; plain `Washer` still falls back to vision.
 
+For Zonaprop and Argenprop listings, washer text in the title, description, features, or amenities does not classify the listing by itself. It only forces the staged summary path to inspect the full extracted gallery and lets strong in-unit photo evidence win over shared/common-laundry photo evidence.
+
 Use `--json` to print the raw `listing_summary` JSON instead.
 
 The summary record includes:
 
 - `decision`: `IN_UNIT`, `SHARED_BUILDING`, `UNKNOWN`, or `CONFLICTING`
 - `confidence`: `high`, `medium`, or `low`
-- `decision_source`: `vision` or `airbnb_amenity`
-- `vision_decision` and `vision_confidence` when a provider metadata override is used
+- `decision_source`: `vision`, `text_guided_vision`, `vision_incomplete`, or `airbnb_amenity`
+- `vision_decision` and `vision_confidence` when provider metadata or text-guided vision changes the final decision
+- `text_guided_full_gallery` when Zonaprop/Argenprop washer text forced the full-gallery vision pass
+- `classified_image_count`, `classification_error_count`, and `incomplete` when some photos could not be classified
 - `airbnb_laundry_amenity_label` and `airbnb_laundry_amenity_text` when present
 - `evidence`: strongest photo-level evidence and image URLs
 - `escalated_image_indexes`: photos sent to the second-pass model
@@ -179,6 +183,8 @@ bun run regression:frozen
 ```
 
 The manifest keeps the original remote image URL for evidence while loading the image bytes from `fixtures/assets/listings/...`, so reports remain readable and evals survive unpublished listings.
+Frozen runs also hydrate provider metadata from the fixture manifest or extraction cache, including Airbnb washer amenity labels, so the repeatable regression matches the production listing-summary decision path.
+Listing fixture runs use the shared listing image limit default instead of a smaller regression-only cap, so full provider galleries are preserved unless `--max-images` is explicitly set.
 
 Fixture image files are tracked with Git LFS. If a clone has pointer files instead of real images, install Git LFS and run:
 
@@ -189,6 +195,22 @@ git lfs pull
 Use the live stale-listing check when you want to catch provider drift or fixtures whose original listing pages have been unpublished. This check intentionally ignores cached listing extraction and should not replace frozen regression:
 
 ```sh
+bun run check:stale-listings
+```
+
+## Core QA
+
+Run the cheap deterministic project gate before shipping code-only changes:
+
+```sh
+bun run qa:core
+```
+
+For model, extraction, or fixture changes, also run the relevant slower gate:
+
+```sh
+bun run regression:frozen
+bun run smoke:extractions --fixtures fixtures/listings-airbnb.jsonl --limit 1 --refresh-extraction
 bun run check:stale-listings
 ```
 
@@ -354,7 +376,6 @@ bun run summary:listings \
   --out results/listing-summary-run.jsonl \
   --model gpt-5.4-mini \
   --escalation-model gpt-5.4 \
-  --max-images 35 \
   --concurrency 25 \
   --listing-concurrency 20
 

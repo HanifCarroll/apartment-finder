@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL_CACHE } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES, DEFAULT_MODEL_CACHE } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import { appendJsonl } from "../src/lib/jsonl";
 import { runClassification } from "../src/classifier-runner";
@@ -29,7 +29,7 @@ Options:
   --fixtures <path>    Listing fixture JSONL path. Defaults to fixtures/listings.jsonl.
   --out <path>         Append classification JSONL records. Defaults to results/listing-label-run-fair.jsonl.
   --models <list>      Comma-separated model IDs. Defaults to gpt-5.4-mini,gpt-5.4-nano.
-  --max-images <n>     Maximum photos per listing. Defaults to 35.
+  --max-images <n>     Maximum photos per listing. Defaults to ${DEFAULT_MAX_IMAGES}.
   --concurrency <n>    Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.
 `);
   process.exit(exitCode);
@@ -40,7 +40,7 @@ function parseArgs(argv: string[]): FairRunArgs {
     fixturesPath: "fixtures/listings.jsonl",
     outPath: "results/listing-label-run-fair.jsonl",
     models: ["gpt-5.4-mini", "gpt-5.4-nano"],
-    maxImages: 35,
+    maxImages: DEFAULT_MAX_IMAGES,
     concurrency: DEFAULT_CONCURRENCY,
   };
 

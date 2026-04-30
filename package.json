@@ -33,6 +33,7 @@
     "fixtures:promote": "bun run scripts/promote-reviewed-candidates.ts",
     "fixtures:download-images": "bun run scripts/download-fixture-images.ts",
     "audit:extractions": "bun run scripts/audit-search-extractions.ts",
+    "qa:core": "bun run typecheck && bun test",
     "test": "vitest run",
     "test:watch": "vitest",
     "playwright:install": "playwright install chromium",

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_EXTRACTION_CACHE } from "../src/cli/args";
+import { DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import { mapConcurrent } from "../src/lib/concurrency";
 import { writeJsonl } from "../src/lib/jsonl";
@@ -56,7 +56,7 @@ Options:
   --fixtures <path>          Listing fixture JSONL path. Defaults to fixtures/listings.jsonl.
   --out <path>               Write JSONL check records. Defaults to results/stale-listing-check.jsonl.
   --limit <n>                Check only the first n fixtures.
-  --max-images <n>           Maximum photos to extract per listing. Defaults to 35.
+  --max-images <n>           Maximum photos to extract per listing. Defaults to ${DEFAULT_MAX_IMAGES}.
   --min-quality-score <n>    Minimum extraction quality score. Defaults to 55.
   --concurrency <n>          Concurrent live checks. Defaults to min(${DEFAULT_CONCURRENCY}, 4).
   --extraction-cache <path>  Cache path option passed to extraction code. Defaults to ${DEFAULT_EXTRACTION_CACHE}.
@@ -70,7 +70,7 @@ function parseArgs(argv: string[]): Args {
     fixturesPath: "fixtures/listings.jsonl",
     outPath: "results/stale-listing-check.jsonl",
     extractionCachePath: DEFAULT_EXTRACTION_CACHE,
-    maxImages: 35,
+    maxImages: DEFAULT_MAX_IMAGES,
     minQualityScore: 55,
     concurrency: Math.min(DEFAULT_CONCURRENCY, 4),
     allowFailures: false,

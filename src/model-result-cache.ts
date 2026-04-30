@@ -16,6 +16,7 @@ export type CachedModelResult = {
   image_sha256: string;
   prompt_version: string;
   schema_version: string;
+  prompt_context_key?: string;
   verdict: Verdict;
   shadow_verdict_v2?: ShadowVerdictV2;
   usage?: unknown;
@@ -28,6 +29,7 @@ export type ModelCacheInput = {
   imageSha256: string;
   promptVersion?: string;
   schemaVersion?: string;
+  promptContextKey?: string;
 };
 
 export function modelResultCacheKey(input: ModelCacheInput): string {
@@ -38,6 +40,7 @@ export function modelResultCacheKey(input: ModelCacheInput): string {
       input.imageSha256,
       input.promptVersion || CLASSIFICATION_PROMPT_VERSION,
       input.schemaVersion || CLASSIFICATION_SCHEMA_VERSION,
+      input.promptContextKey || "",
     ].join("\0"))
     .digest("hex");
 }
@@ -98,6 +101,7 @@ export async function writeCachedModelResult(
     image_sha256: input.imageSha256,
     prompt_version: input.promptVersion || CLASSIFICATION_PROMPT_VERSION,
     schema_version: input.schemaVersion || CLASSIFICATION_SCHEMA_VERSION,
+    prompt_context_key: input.promptContextKey || undefined,
     ...result,
   };
   await mkdir(dirname(cachePath), { recursive: true }).catch(() => undefined);
