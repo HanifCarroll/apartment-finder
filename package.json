@@ -13,6 +13,8 @@
     "eval:listing-summaries": "bun run scripts/evaluate-listing-summaries.ts",
     "fair:listings": "bun run scripts/run-fair-listing-run.ts",
     "summary:listings": "bun run scripts/run-listing-summaries.ts",
+    "regression:frozen": "bun run scripts/run-frozen-listing-regression.ts",
+    "check:stale-listings": "bun run scripts/check-stale-listings.ts",
     "find": "bun run scripts/search-listings.ts",
     "scan": "bun run scripts/scan-listings.ts",
     "search": "bun run scripts/search-listings.ts",

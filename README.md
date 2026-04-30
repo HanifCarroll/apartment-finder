@@ -172,13 +172,10 @@ bun run fixtures:download-images \
 
 The downloader reads cached listing extraction from `.apartment-laundry-cache/extractions.jsonl` by default. If you need fresh photo URLs or a fixture has no cached extraction, add `--refresh-extraction`.
 
-Run listing-summary evals against local image bytes with:
+Run the default repeatable listing-level regression against local image bytes with:
 
 ```sh
-bun run summary:listings \
-  --fixtures fixtures/listings.jsonl \
-  --fixture-images fixtures/assets/listing-images.jsonl \
-  --out results/local-fixture-summary.jsonl
+bun run regression:frozen
 ```
 
 The manifest keeps the original remote image URL for evidence while loading the image bytes from `fixtures/assets/listings/...`, so reports remain readable and evals survive unpublished listings.
@@ -187,6 +184,12 @@ Fixture image files are tracked with Git LFS. If a clone has pointer files inste
 
 ```sh
 git lfs pull
+```
+
+Use the live stale-listing check when you want to catch provider drift or fixtures whose original listing pages have been unpublished. This check intentionally ignores cached listing extraction and should not replace frozen regression:
+
+```sh
+bun run check:stale-listings
 ```
 
 ## Smoke Test Extraction
