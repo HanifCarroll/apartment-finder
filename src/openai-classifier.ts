@@ -2,8 +2,15 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { withGlobalModelCallSlot } from "./lib/concurrency";
 import { logger } from "./lib/logger";
-import type { Args, ImagePayload, Verdict } from "./types";
+import {
+  CLASSIFICATION_PROMPT_VERSION,
+  CLASSIFICATION_SCHEMA_VERSION,
+  readCachedModelResult,
+  writeCachedModelResult,
+} from "./model-result-cache";
+import type { Args, ImagePayload, ShadowVerdictV2, Verdict } from "./types";
 import { VerdictSchema } from "./types";
+import { buildShadowVerdictV2 } from "./verdict-v2";
 
 function classificationPrompt(): string {
   return `You are classifying apartment listing photos for a renter who wants a washing machine inside the private apartment unit.
@@ -35,14 +42,50 @@ export async function classifyWithModel(
   model: string,
   image: ImagePayload,
   detail: Args["detail"],
+  options: {
+    modelCachePath?: string;
+    useModelCache?: boolean;
+    refreshModelCache?: boolean;
+    shadowVerdictV2?: boolean;
+  } = {},
 ): Promise<{
   model: string;
   verdict: Verdict;
+  shadow_verdict_v2?: ShadowVerdictV2;
   usage?: unknown;
   rate_limits?: Record<string, string>;
   latency_ms: number;
+  cache_hit?: boolean;
 }> {
   const startedAt = performance.now();
+  const cacheInput = {
+    model,
+    detail,
+    imageSha256: image.sha256,
+    promptVersion: CLASSIFICATION_PROMPT_VERSION,
+    schemaVersion: CLASSIFICATION_SCHEMA_VERSION,
+  };
+  if (options.useModelCache && options.modelCachePath && !options.refreshModelCache) {
+    const cached = await readCachedModelResult(options.modelCachePath, cacheInput);
+    if (cached) {
+      logger.info({
+        event: "model_result_cache_hit",
+        model,
+        imageSource: image.source,
+        imageSha256: image.sha256,
+        latencyMs: Math.round(performance.now() - startedAt),
+      });
+      return {
+        model,
+        verdict: cached.verdict,
+        shadow_verdict_v2: cached.shadow_verdict_v2,
+        usage: cached.usage,
+        latency_ms: 0,
+        cache_hit: true,
+      };
+    }
+  }
+
   let data: {
     output_parsed: Verdict | null;
     usage?: { total_tokens?: number } | null;
@@ -90,6 +133,7 @@ export async function classifyWithModel(
   if (!verdict) {
     throw new Error(`Model ${model} returned no parsed verdict.`);
   }
+  const shadow_verdict_v2 = options.shadowVerdictV2 ? buildShadowVerdictV2(verdict) : undefined;
 
   const rate_limits = readRateLimitHeaders(response);
   logger.info({
@@ -106,11 +150,24 @@ export async function classifyWithModel(
     resetTokens: rate_limits["x-ratelimit-reset-tokens"],
   });
 
-  return {
+  const result = {
     model,
     verdict,
+    shadow_verdict_v2,
     usage: data.usage,
     rate_limits,
     latency_ms,
+    cache_hit: false,
   };
+
+  if (options.useModelCache && options.modelCachePath) {
+    await writeCachedModelResult(options.modelCachePath, cacheInput, {
+      verdict,
+      shadow_verdict_v2,
+      usage: data.usage,
+      latency_ms,
+    });
+  }
+
+  return result;
 }

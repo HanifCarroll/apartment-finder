@@ -1,10 +1,12 @@
 import type { Args } from "../types";
 import { DEFAULT_CONCURRENCY } from "../lib/concurrency";
+import { DEFAULT_MAX_ESCALATION_IMAGES } from "../listing/escalation";
 
 export const DEFAULT_MODEL = "gpt-5.4-mini";
 export const DEFAULT_ESCALATION_MODEL = "gpt-5.4";
 export const DEFAULT_CACHE_DIR = ".apartment-laundry-cache";
 export const DEFAULT_EXTRACTION_CACHE = `${DEFAULT_CACHE_DIR}/extractions.jsonl`;
+export const DEFAULT_MODEL_CACHE = `${DEFAULT_CACHE_DIR}/model-results.jsonl`;
 export const DEFAULT_MAX_IMAGES = 60;
 
 function usage(exitCode = 1): never {
@@ -22,10 +24,15 @@ Options:
   --out <path>        Append JSONL model results to this file.
   --cache-dir <path>  Where downloaded images are cached. Defaults to ${DEFAULT_CACHE_DIR}.
   --extraction-cache <path> Listing photo extraction cache path. Defaults to ${DEFAULT_EXTRACTION_CACHE}.
+  --model-cache <path> Model result cache path. Defaults to ${DEFAULT_MODEL_CACHE}.
   --refresh-extraction Ignore cached listing extraction and write a fresh one.
+  --refresh-model-cache Ignore cached model results and write fresh results.
   --no-extraction-cache Disable listing extraction reads and writes.
+  --no-model-cache Disable model result cache reads and writes.
+  --no-shadow-v2     Disable shadow image verdict v2 fields.
   --detail <level>    Image detail: low, high, or auto. Defaults to auto.
   --max-images <n>    Maximum listing photos to extract. Defaults to ${DEFAULT_MAX_IMAGES}.
+  --max-escalation-images <n> Maximum photos to escalate per listing summary. Defaults to ${DEFAULT_MAX_ESCALATION_IMAGES}.
   --concurrency <n>   Concurrent model calls for listing classification. Defaults to ${DEFAULT_CONCURRENCY}.
   --listing-summary   Return a listing-level decision using mini first, then ${DEFAULT_ESCALATION_MODEL} for uncertain photos.
   --escalation-model <model> Model for second-pass listing summary checks. Defaults to ${DEFAULT_ESCALATION_MODEL}.
@@ -41,11 +48,16 @@ export function parseArgs(argv: string[]): Args {
   const args: Args = {
     models: [process.env.OPENAI_MODEL || DEFAULT_MODEL],
     cacheDir: DEFAULT_CACHE_DIR,
+    modelCachePath: DEFAULT_MODEL_CACHE,
     extractionCachePath: DEFAULT_EXTRACTION_CACHE,
     useExtractionCache: true,
+    useModelCache: true,
     refreshExtraction: false,
+    refreshModelCache: false,
+    shadowVerdictV2: true,
     detail: "auto",
     maxImages: DEFAULT_MAX_IMAGES,
+    maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
     concurrency: DEFAULT_CONCURRENCY,
     listingSummary: false,
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
@@ -100,11 +112,25 @@ export function parseArgs(argv: string[]): Args {
         args.extractionCachePath = next;
         i += 1;
         break;
+      case "--model-cache":
+        if (!next) usage();
+        args.modelCachePath = next;
+        i += 1;
+        break;
       case "--refresh-extraction":
         args.refreshExtraction = true;
         break;
+      case "--refresh-model-cache":
+        args.refreshModelCache = true;
+        break;
       case "--no-extraction-cache":
         args.useExtractionCache = false;
+        break;
+      case "--no-model-cache":
+        args.useModelCache = false;
+        break;
+      case "--no-shadow-v2":
+        args.shadowVerdictV2 = false;
         break;
       case "--detail":
         if (!next || !["low", "high", "auto"].includes(next)) usage();
@@ -116,6 +142,14 @@ export function parseArgs(argv: string[]): Args {
         const maxImages = Number.parseInt(next, 10);
         if (!Number.isInteger(maxImages) || maxImages < 1) usage();
         args.maxImages = maxImages;
+        i += 1;
+        break;
+      }
+      case "--max-escalation-images": {
+        if (!next) usage();
+        const maxEscalationImages = Number.parseInt(next, 10);
+        if (!Number.isInteger(maxEscalationImages) || maxEscalationImages < 0) usage();
+        args.maxEscalationImages = maxEscalationImages;
         i += 1;
         break;
       }

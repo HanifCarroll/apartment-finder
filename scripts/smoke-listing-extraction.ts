@@ -16,6 +16,7 @@ type SmokeArgs = {
   extractionCachePath: string;
   useExtractionCache: boolean;
   refreshExtraction: boolean;
+  minQualityScore: number;
 };
 
 function usage(exitCode = 1): never {
@@ -30,6 +31,7 @@ Options:
   --extraction-cache <path> Listing photo extraction cache path. Defaults to ${DEFAULT_EXTRACTION_CACHE}.
   --refresh-extraction      Ignore cached listing extraction and write a fresh one.
   --no-extraction-cache     Disable listing extraction reads and writes.
+  --min-quality-score <n>   Fail if extraction quality is below this score. Defaults to 55.
 `);
   process.exit(exitCode);
 }
@@ -43,6 +45,7 @@ function parseArgs(argv: string[]): SmokeArgs {
     extractionCachePath: DEFAULT_EXTRACTION_CACHE,
     useExtractionCache: true,
     refreshExtraction: false,
+    minQualityScore: 55,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -88,6 +91,14 @@ function parseArgs(argv: string[]): SmokeArgs {
       case "--no-extraction-cache":
         args.useExtractionCache = false;
         break;
+      case "--min-quality-score": {
+        if (!next) usage();
+        const minQualityScore = Number.parseInt(next, 10);
+        if (!Number.isInteger(minQualityScore) || minQualityScore < 0 || minQualityScore > 100) usage();
+        args.minQualityScore = minQualityScore;
+        i += 1;
+        break;
+      }
       default:
         usage();
     }
@@ -112,8 +123,11 @@ let failed = 0;
 for (const fixture of fixtures) {
   try {
     const extraction = await extractListingImageUrls(fixture.listing_url, args);
+    const quality = extraction.extraction_quality;
+    const qualityScore = quality?.score ?? 0;
+    const qualityOk = qualityScore >= args.minQualityScore;
     const record = {
-      ok: true,
+      ok: qualityOk,
       type: "listing_extraction_smoke",
       created_at: new Date().toISOString(),
       listing_id: fixture.id,
@@ -121,7 +135,13 @@ for (const fixture of fixtures) {
       ...extraction,
     };
     await appendJsonl(args.outPath, [record]);
-    console.log(`${fixture.id}: ${record.image_count} images (${record.extraction_source})`);
+    const qualityText = quality ? `quality ${quality.score}/${quality.status}` : "quality missing";
+    console.log(`${fixture.id}: ${record.image_count} images (${record.extraction_source}, ${qualityText})`);
+    if (!qualityOk) {
+      failed += 1;
+      const failedChecks = quality?.checks.filter((item) => !item.ok).map((item) => item.name).join(", ") || "unknown";
+      console.error(`${fixture.id}: extraction quality below ${args.minQualityScore}: ${failedChecks}`);
+    }
   } catch (error) {
     failed += 1;
     const record = {

@@ -1,4 +1,4 @@
-import type { LocationLabel, Verdict } from "../types";
+import type { LocationLabel, ShadowVerdictV2, Verdict } from "../types";
 
 export type ClassificationRecordLike = {
   ok?: boolean;
@@ -7,6 +7,7 @@ export type ClassificationRecordLike = {
   model?: string;
   pass?: string;
   verdict?: Verdict;
+  shadow_verdict_v2?: ShadowVerdictV2;
 };
 
 export type ListingEvidence = {
@@ -18,6 +19,7 @@ export type ListingEvidence = {
   washing_machine_visibility: Verdict["washing_machine_visibility"];
   confidence: number;
   rationale: string;
+  shadow_verdict_v2?: ShadowVerdictV2;
 };
 
 export type ListingAggregate = {
@@ -60,6 +62,7 @@ export function buildEvidence(records: ClassificationRecordLike[]): ListingEvide
       washing_machine_visibility: record.verdict!.washing_machine_visibility,
       confidence: record.verdict!.confidence,
       rationale: record.verdict!.rationale,
+      shadow_verdict_v2: record.shadow_verdict_v2,
     }))
     .sort((a, b) => labelOrder[a.location_label] - labelOrder[b.location_label] || b.confidence - a.confidence);
 }
@@ -135,6 +138,7 @@ export function aggregateTwoModelAgreement(records: ClassificationRecordLike[]):
       washing_machine_visibility: record.verdict.washing_machine_visibility,
       confidence: record.verdict.confidence,
       rationale: record.verdict.rationale,
+      shadow_verdict_v2: record.shadow_verdict_v2,
     });
     evidenceBySource.set(source, items);
   }

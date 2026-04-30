@@ -24,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getSearchScanJob, startSearchScan, type SearchScanJob, type SearchUiResult } from "@/web/search.functions";
+import { getSearchScanJob, recordListingFeedback, startSearchScan, type SearchScanJob, type SearchUiResult } from "@/web/search.functions";
 import { supportedNeighborhoodOptions, type SupportedNeighborhood } from "@/core/search-url-builder";
 
 export const Route = createFileRoute("/")({
@@ -102,6 +102,7 @@ const getInitialPreferences = createServerFn({ method: "GET" }).handler(async ()
 function HomePage() {
   const startSearchScanFn = useServerFn(startSearchScan);
   const getSearchScanJobFn = useServerFn(getSearchScanJob);
+  const recordListingFeedbackFn = useServerFn(recordListingFeedback);
   const initialPreferences = Route.useLoaderData();
   const [form, setForm] = React.useState<FormState>(() => readStoredForm(initialPreferences.form));
   const [resultFilter, setResultFilter] = React.useState<ResultFilter>(() => readStoredResultFilter(initialPreferences.resultFilter));
@@ -113,6 +114,15 @@ function HomePage() {
     mutationKey: ["search-scan", form.mode, form.provider],
     mutationFn: async (payload: FormState) => startSearchScanFn({ data: toSearchPayload(payload) }),
     onSuccess: ({ jobId }) => setActiveJobId(jobId),
+  });
+  const feedbackMutation = useMutation({
+    mutationKey: ["listing-feedback"],
+    mutationFn: async (payload: {
+      listingUrl: string;
+      expectedLocation: "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN" | "CONFLICTING";
+      predictedLocation?: string;
+      item: SearchUiResult["items"][number];
+    }) => recordListingFeedbackFn({ data: { ...payload, source: "web" } }),
   });
 
   const jobQuery = useQuery({
@@ -256,6 +266,12 @@ function HomePage() {
                   onFilterChange={setResultFilter}
                   onSortChange={setResultSort}
                   onOpenLightbox={(images, index, title) => setLightbox({ images, index, title })}
+                  onFeedback={(item, expectedLocation) => feedbackMutation.mutate({
+                    listingUrl: item.listingUrl,
+                    expectedLocation,
+                    predictedLocation: item.decision,
+                    item,
+                  })}
                 />
               </div>
             </div>
@@ -411,6 +427,7 @@ function ResultsPanel({
   onFilterChange,
   onSortChange,
   onOpenLightbox,
+  onFeedback,
 }: {
   result?: SearchUiResult;
   error: Error | null;
@@ -421,6 +438,7 @@ function ResultsPanel({
   onFilterChange: (filter: ResultFilter) => void;
   onSortChange: (sort: ResultSort) => void;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
+  onFeedback: (item: SearchUiResult["items"][number], expectedLocation: "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN" | "CONFLICTING") => void;
 }) {
   if (pending && !result) {
     return (
@@ -486,6 +504,7 @@ function ResultsPanel({
               item={item}
               index={index + 1}
               onOpenLightbox={onOpenLightbox}
+              onFeedback={onFeedback}
             />
           ))
         ) : (
@@ -581,10 +600,12 @@ function ListingResult({
   item,
   index,
   onOpenLightbox,
+  onFeedback,
 }: {
   item: SearchUiResult["items"][number];
   index: number;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
+  onFeedback: (item: SearchUiResult["items"][number], expectedLocation: "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN" | "CONFLICTING") => void;
 }) {
   const [expanded, setExpanded] = React.useState(false);
   const listing = describeListingUrl(item.listingUrl, item.title);
@@ -638,6 +659,21 @@ function ListingResult({
             {typeof item.ageYears === "number" ? <Badge variant="outline">{item.ageYears} años</Badge> : null}
             {item.amenity ? <Badge variant="outline">{item.amenity}</Badge> : null}
             <Badge variant="outline">{item.imageCount ?? item.imageUrls.length} Photos</Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-2">
+            <span className="text-xs font-medium text-muted-foreground">Mark correct label</span>
+            {(["IN_UNIT", "SHARED_BUILDING", "UNKNOWN"] as const).map((label) => (
+              <Button
+                key={label}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => onFeedback(item, label)}
+              >
+                {formatDecision(label)}
+              </Button>
+            ))}
           </div>
 
           {item.description ? (

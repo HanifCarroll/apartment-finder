@@ -145,6 +145,21 @@ Useful flags:
 
 If live extraction fails and a cached record exists, the CLI falls back to cached photo URLs and marks `extraction_source` as `cache_after_live_failure`.
 
+## Model Result Cache
+
+Vision classifications are cached in `.apartment-laundry-cache/model-results.jsonl` by default. Cache keys include the model, image detail level, image SHA-256, prompt version, and schema version, so repeated scans and evals avoid paying for the same image/model verdict again.
+
+Useful flags:
+
+```sh
+--refresh-model-cache      # ignore cached verdicts and write fresh results
+--no-model-cache           # disable model result cache reads and writes
+--model-cache <path>       # use a different model-result cache file
+--no-shadow-v2             # disable shadow v2 verdict fields
+```
+
+The current v2 image verdict schema runs in shadow mode. It is derived from the accepted v1 verdict and stored in output evidence for analysis, but it does not change the listing decision yet.
+
 ## Smoke Test Extraction
 
 Provider-specific smoke fixtures are in `fixtures/listings-<provider>.jsonl`.
@@ -155,6 +170,8 @@ bun run smoke:extractions \
   --limit 1 \
   --refresh-extraction
 ```
+
+Smoke extraction records include an `extraction_quality` score. The default smoke run fails below `55`; use `--min-quality-score <n>` to tighten or loosen that provider-specific hardening check.
 
 To smoke test search-result pagination and listing URL discovery without model calls:
 
@@ -268,6 +285,12 @@ The default local scan throughput is `OPENAI_MODEL_CONCURRENCY=25`, `LISTING_SCA
 
 Backend scan logs are written to `logs/app.log` by default. The log is JSONL and includes search discovery, extraction/cache, listing, batch, image-load, first-pass model, escalation, and summary timing events. Override with `APP_LOG_PATH=/path/to/app.log`.
 
+Summarize scan timings, cache hit rates, token counts, and a concurrency recommendation with:
+
+```sh
+bun run logs:summary
+```
+
 Useful CLI flags:
 
 ```sh
@@ -315,6 +338,24 @@ Current best benchmark on the original 40 labeled Zonaprop listings was the two-
 Listing summary evals report accuracy by expected class and by `decision_source`, so Airbnb metadata overrides can be tracked separately from vision-only decisions.
 
 For regression comparisons only, set `APARTMENT_FINDER_ESCALATION_GATE=broad` to reproduce the older broad second-pass behavior. Leave it unset for the product default candidate gate.
+
+To inspect mistakes from a listing summary run:
+
+```sh
+bun run analyze:failures \
+  --results results/listing-summary-run.jsonl \
+  --fixtures fixtures/listings.jsonl
+```
+
+To record corrected labels from the CLI:
+
+```sh
+bun run feedback \
+  --listing-url "https://www.zonaprop.com.ar/propiedades/..." \
+  --expected SHARED_BUILDING \
+  --predicted IN_UNIT \
+  --note "False positive on boiler image"
+```
 
 ## Development
 

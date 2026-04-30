@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_DIR, DEFAULT_MODEL } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY, mapConcurrent } from "../src/lib/concurrency";
 import { loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel } from "../src/openai-classifier";
@@ -23,6 +23,10 @@ type EvalArgs = {
   outPath: string;
   summaryPath: string;
   concurrency: number;
+  modelCachePath: string;
+  useModelCache: boolean;
+  refreshModelCache: boolean;
+  shadowVerdictV2: boolean;
   limit?: number;
 };
 
@@ -73,6 +77,10 @@ Options:
   --out <path>         Write per-image JSONL records. Defaults to results/eval-fixtures.jsonl.
   --summary <path>     Write summary JSON. Defaults to results/eval-fixtures-summary.json.
   --cache-dir <path>   Image cache dir. Defaults to ${DEFAULT_CACHE_DIR}.
+  --model-cache <path> Model result cache path. Defaults to ${DEFAULT_MODEL_CACHE}.
+  --refresh-model-cache Ignore cached model results and write fresh model results.
+  --no-model-cache     Disable model result cache reads and writes.
+  --no-shadow-v2       Disable shadow v2 verdict fields.
   --detail <level>     Image detail: low, high, or auto. Defaults to auto.
   --concurrency <n>    Number of concurrent model calls. Defaults to ${DEFAULT_CONCURRENCY}.
   --limit <n>          Evaluate only the first n fixtures.
@@ -89,6 +97,10 @@ function parseArgs(argv: string[]): EvalArgs {
     outPath: "results/eval-fixtures.jsonl",
     summaryPath: "results/eval-fixtures-summary.json",
     concurrency: DEFAULT_CONCURRENCY,
+    modelCachePath: DEFAULT_MODEL_CACHE,
+    useModelCache: true,
+    refreshModelCache: false,
+    shadowVerdictV2: true,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -119,6 +131,20 @@ function parseArgs(argv: string[]): EvalArgs {
         if (!next) usage();
         args.cacheDir = next;
         i += 1;
+        break;
+      case "--model-cache":
+        if (!next) usage();
+        args.modelCachePath = next;
+        i += 1;
+        break;
+      case "--refresh-model-cache":
+        args.refreshModelCache = true;
+        break;
+      case "--no-model-cache":
+        args.useModelCache = false;
+        break;
+      case "--no-shadow-v2":
+        args.shadowVerdictV2 = false;
         break;
       case "--detail":
         if (!next || !["low", "high", "auto"].includes(next)) usage();
@@ -287,7 +313,12 @@ async function main() {
         imageCache.set(job.fixture.image_url, imagePromise);
       }
       const image = await imagePromise;
-      const result = await classifyWithModel(client, job.model, image, args.detail);
+      const result = await classifyWithModel(client, job.model, image, args.detail, {
+        modelCachePath: args.modelCachePath,
+        useModelCache: args.useModelCache,
+        refreshModelCache: args.refreshModelCache,
+        shadowVerdictV2: args.shadowVerdictV2,
+      });
       const locationCorrect = result.verdict.location_label === job.fixture.expected_location;
       const containsCorrect =
         result.verdict.contains_washing_machine === job.fixture.expected_contains_washing_machine;

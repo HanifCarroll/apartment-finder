@@ -6,6 +6,7 @@ import {
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
+  DEFAULT_MODEL_CACHE,
 } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import {
@@ -37,6 +38,9 @@ Options:
   --max-images <n>          Maximum photos per listing. Defaults to ${DEFAULT_MAX_IMAGES}.
   --concurrency <n>         Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.
   --cache-dir <path>        Image cache directory. Defaults to ${DEFAULT_CACHE_DIR}.
+  --model-cache <path>      Model result cache path. Defaults to ${DEFAULT_MODEL_CACHE}.
+  --refresh-model-cache     Ignore cached model results and write fresh model results.
+  --no-model-cache          Disable model result cache reads and writes.
   --extraction-cache <path> Listing extraction cache path. Defaults to ${DEFAULT_EXTRACTION_CACHE}.
   --refresh-extraction      Ignore cached listing extraction and write a fresh one.
   --no-extraction-cache     Disable listing extraction reads and writes.

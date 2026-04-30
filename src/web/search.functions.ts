@@ -6,9 +6,12 @@ import {
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
+  DEFAULT_MODEL_CACHE,
 } from "@/cli/args";
 import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "@/lib/concurrency";
+import { DEFAULT_MAX_ESCALATION_IMAGES } from "@/listing/escalation";
 import { deriveListingDetails } from "@/listing/details";
+import { appendListingFeedback } from "@/feedback";
 
 const SearchRequestSchema = z.object({
   mode: z.enum(["url", "filters"]),
@@ -28,8 +31,18 @@ const SearchRequestSchema = z.object({
   maxListings: z.coerce.number().int().positive().max(100).default(20),
   maxPages: z.coerce.number().int().positive().max(10).default(3),
   maxImages: z.coerce.number().int().positive().max(120).default(DEFAULT_MAX_IMAGES),
+  maxEscalationImages: z.coerce.number().int().nonnegative().max(120).default(DEFAULT_MAX_ESCALATION_IMAGES),
   model: z.string().trim().default(DEFAULT_MODEL),
   escalationModel: z.string().trim().default(DEFAULT_ESCALATION_MODEL),
+});
+
+const ListingFeedbackSchema = z.object({
+  listingUrl: z.string().url(),
+  expectedLocation: z.enum(["IN_UNIT", "SHARED_BUILDING", "UNKNOWN", "CONFLICTING"]),
+  predictedLocation: z.string().optional(),
+  source: z.string().optional(),
+  note: z.string().trim().optional(),
+  item: z.unknown().optional(),
 });
 
 type SearchRequest = z.infer<typeof SearchRequestSchema>;
@@ -65,6 +78,10 @@ export type SearchUiItem = {
   imageCount?: number;
   galleryCount?: number | null;
   gallerySource?: string;
+  extractionQuality?: {
+    score: number;
+    status: string;
+  };
   evidence: Array<{
     photo?: number;
     label?: string;
@@ -150,6 +167,20 @@ export const getSearchScanJob = createServerFn({ method: "GET" })
     return job;
   });
 
+export const recordListingFeedback = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => ListingFeedbackSchema.parse(input))
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    await appendListingFeedback({
+      listing_url: data.listingUrl,
+      expected_location: data.expectedLocation,
+      predicted_location: data.predictedLocation,
+      source: data.source || "web",
+      note: data.note,
+      item: data.item,
+    });
+    return { ok: true };
+  });
+
 async function prepareSearchScan(data: SearchRequest) {
   const { buildSearchUrl, parseNeighborhoodList, scanSearchUrl } = await import("@/core");
 
@@ -192,11 +223,16 @@ async function prepareSearchScan(data: SearchRequest) {
       model: data.model,
       escalationModel: data.escalationModel,
       maxImages: data.maxImages,
+      maxEscalationImages: data.maxEscalationImages,
       concurrency: DEFAULT_CONCURRENCY,
       cacheDir: DEFAULT_CACHE_DIR,
+      modelCachePath: DEFAULT_MODEL_CACHE,
       extractionCachePath: DEFAULT_EXTRACTION_CACHE,
       useExtractionCache: true,
+      useModelCache: true,
       refreshExtraction: false,
+      refreshModelCache: false,
+      shadowVerdictV2: true,
       stagedClassification: true,
       maxListings: data.maxListings,
       maxPages: data.maxPages,
@@ -336,6 +372,12 @@ function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl
     imageCount: summary?.image_count ?? extraction?.image_count,
     galleryCount: extraction?.gallery_count,
     gallerySource: extraction?.extraction_source,
+    extractionQuality: extraction?.extraction_quality && typeof extraction.extraction_quality === "object"
+      ? {
+        score: extraction.extraction_quality.score,
+        status: extraction.extraction_quality.status,
+      }
+      : undefined,
     evidence: (summary?.evidence || []).slice(0, 4).map((evidence) => ({
       photo: evidence.listing_image_index,
       label: evidence.location_label,

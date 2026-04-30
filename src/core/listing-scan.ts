@@ -13,11 +13,16 @@ export type ListingScanOptions = {
   model: string;
   escalationModel: string;
   maxImages: number;
+  maxEscalationImages: number;
   concurrency: number;
   cacheDir: string;
+  modelCachePath: string;
   extractionCachePath: string;
   useExtractionCache: boolean;
+  useModelCache: boolean;
   refreshExtraction: boolean;
+  refreshModelCache: boolean;
+  shadowVerdictV2: boolean;
   stagedClassification?: boolean;
 };
 
@@ -32,11 +37,16 @@ export function toListingSummaryArgs(listingUrl: string, options: ListingScanOpt
     listingUrl,
     models: [options.model],
     cacheDir: options.cacheDir,
+    modelCachePath: options.modelCachePath,
     extractionCachePath: options.extractionCachePath,
     useExtractionCache: options.useExtractionCache,
+    useModelCache: options.useModelCache,
     refreshExtraction: options.refreshExtraction,
+    refreshModelCache: options.refreshModelCache,
+    shadowVerdictV2: options.shadowVerdictV2,
     detail: "auto",
     maxImages: options.maxImages,
+    maxEscalationImages: options.maxEscalationImages,
     concurrency: options.concurrency,
     listingSummary: true,
     escalationModel: options.escalationModel,

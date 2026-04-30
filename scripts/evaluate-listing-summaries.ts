@@ -20,6 +20,9 @@ type SummaryRecord = {
   airbnb_laundry_amenity_label?: string;
   airbnb_laundry_amenity_text?: string;
   policy?: string;
+  run_id?: string;
+  escalation_policy?: string;
+  max_escalation_images?: number;
   first_pass_model?: string;
   escalation_model?: string;
   image_count?: number;
@@ -42,6 +45,9 @@ type EvalRecord = {
   airbnb_laundry_amenity_label?: string;
   airbnb_laundry_amenity_text?: string;
   policy?: string;
+  run_id?: string;
+  escalation_policy?: string;
+  max_escalation_images?: number;
   first_pass_model?: string;
   escalation_model?: string;
   image_count?: number;
@@ -168,6 +174,8 @@ function summarize(records: EvalRecord[]) {
   const byDecisionSource = new Map<string, ReturnType<typeof emptyBucket>>();
   let escalatedListings = 0;
   let escalatedImages = 0;
+  const runIds = new Set<string>();
+  const escalationPolicies = new Set<string>();
 
   for (const record of okRecords) {
     addToBucket(overall, record);
@@ -182,6 +190,8 @@ function summarize(records: EvalRecord[]) {
 
     if ((record.escalated_image_count || 0) > 0) escalatedListings += 1;
     escalatedImages += record.escalated_image_count || 0;
+    if (record.run_id) runIds.add(record.run_id);
+    if (record.escalation_policy) escalationPolicies.add(record.escalation_policy);
   }
 
   const formatBucket = (bucket: ReturnType<typeof emptyBucket>) => ({
@@ -196,6 +206,8 @@ function summarize(records: EvalRecord[]) {
     records_failed: records.filter((record) => !record.ok).length,
     escalated_listings: escalatedListings,
     escalated_images: escalatedImages,
+    run_ids: Array.from(runIds).sort(),
+    escalation_policies: Array.from(escalationPolicies).sort(),
     overall: formatBucket(overall),
     by_expected_location: Object.fromEntries(
       Array.from(byExpected.entries()).map(([location, bucket]) => [location, formatBucket(bucket)]),
@@ -214,6 +226,8 @@ function printSummary(summary: ReturnType<typeof summarize>) {
   console.log(`missed SHARED_BUILDING: ${summary.overall.missed_shared}`);
   console.log(`escalated listings: ${summary.escalated_listings}`);
   console.log(`escalated images: ${summary.escalated_images}`);
+  if (summary.run_ids.length > 0) console.log(`run ids: ${summary.run_ids.join(", ")}`);
+  if (summary.escalation_policies.length > 0) console.log(`escalation policies: ${summary.escalation_policies.join(", ")}`);
   console.log("by expected listing location:");
   for (const [location, bucket] of Object.entries(summary.by_expected_location)) {
     console.log(`  ${location}: ${bucket.correct}/${bucket.total} (${bucket.accuracy})`);
@@ -263,6 +277,9 @@ const evalRecords = listings.map((listing): EvalRecord => {
     airbnb_laundry_amenity_label: summaryRecord.airbnb_laundry_amenity_label,
     airbnb_laundry_amenity_text: summaryRecord.airbnb_laundry_amenity_text,
     policy: summaryRecord.policy,
+    run_id: summaryRecord.run_id,
+    escalation_policy: summaryRecord.escalation_policy,
+    max_escalation_images: summaryRecord.max_escalation_images,
     first_pass_model: summaryRecord.first_pass_model,
     escalation_model: summaryRecord.escalation_model,
     image_count: summaryRecord.image_count,

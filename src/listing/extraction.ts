@@ -7,6 +7,7 @@ import {
 import { logger } from "../lib/logger";
 import type { Args, ListingExtraction } from "../types";
 import { extractListingImageUrlsWithPlaywriter } from "../providers/zonaprop";
+import { scoreListingExtraction } from "./extraction-quality";
 
 const MAX_EXTRACTION_ATTEMPTS = 3;
 
@@ -46,9 +47,13 @@ function withExtractionMetadata(
   extraction: ListingExtraction,
   metadata: Pick<ListingExtraction, "extraction_source" | "extraction_attempts" | "extraction_error">,
 ): ListingExtraction {
-  return {
+  const withMetadata = {
     ...extraction,
     ...metadata,
+  };
+  return {
+    ...withMetadata,
+    extraction_quality: scoreListingExtraction(withMetadata),
   };
 }
 

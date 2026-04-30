@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL_CACHE } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import { appendJsonl } from "../src/lib/jsonl";
 import { runClassification } from "../src/classifier-runner";
+import { DEFAULT_MAX_ESCALATION_IMAGES } from "../src/listing/escalation";
 import type { Args, LocationLabel } from "../src/types";
 
 type ListingFixture = {
@@ -114,11 +115,16 @@ async function main() {
       listingUrl: listing.listing_url,
       models: args.models,
       cacheDir: DEFAULT_CACHE_DIR,
+      modelCachePath: DEFAULT_MODEL_CACHE,
       extractionCachePath: DEFAULT_EXTRACTION_CACHE,
       useExtractionCache: true,
+      useModelCache: true,
       refreshExtraction: false,
+      refreshModelCache: false,
+      shadowVerdictV2: true,
       detail: "auto",
       maxImages: args.maxImages,
+      maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
       concurrency: args.concurrency,
       listingSummary: false,
       escalationModel: "gpt-5.4",

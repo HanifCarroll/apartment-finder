@@ -22,6 +22,21 @@ export const VerdictSchema = z.object({
 export type LocationLabel = z.infer<typeof LocationLabel>;
 export type Verdict = z.infer<typeof VerdictSchema>;
 
+export const ShadowVerdictV2Schema = z.object({
+  schema_version: z.literal("image-verdict-v2-shadow"),
+  washer_visible: z.boolean(),
+  washer_visibility: z.enum(["clear", "partial", "none", "unsure"]),
+  likely_location: LocationLabel,
+  evidence_strength: z.enum(["strong", "medium", "weak", "none"]),
+  in_unit_signal_count: z.number().int().nonnegative(),
+  shared_space_signal_count: z.number().int().nonnegative(),
+  visual_evidence_count: z.number().int().nonnegative(),
+  confuser_risk: z.boolean(),
+  conflict_risk: z.boolean(),
+});
+
+export type ShadowVerdictV2 = z.infer<typeof ShadowVerdictV2Schema>;
+
 export type Args = {
   imageUrl?: string;
   imagePath?: string;
@@ -29,11 +44,16 @@ export type Args = {
   models: string[];
   outPath?: string;
   cacheDir: string;
+  modelCachePath: string;
   extractionCachePath: string;
   useExtractionCache: boolean;
+  useModelCache: boolean;
   refreshExtraction: boolean;
+  refreshModelCache: boolean;
+  shadowVerdictV2: boolean;
   detail: "low" | "high" | "auto";
   maxImages: number;
+  maxEscalationImages: number;
   concurrency: number;
   listingSummary: boolean;
   escalationModel: string;
@@ -41,6 +61,7 @@ export type Args = {
   stagedClassification: boolean;
   extractOnly: boolean;
   jsonOutput: boolean;
+  runId?: string;
 };
 
 export type ImagePayload = {
@@ -48,7 +69,18 @@ export type ImagePayload = {
   dataUrl: string;
   contentType: string;
   bytes: number;
+  sha256: string;
   cachedPath?: string;
+};
+
+export type ExtractionQuality = {
+  score: number;
+  status: "good" | "warning" | "poor";
+  checks: Array<{
+    name: string;
+    ok: boolean;
+    message: string;
+  }>;
 };
 
 export type ListingExtraction = {
@@ -78,6 +110,7 @@ export type ListingExtraction = {
   session_id?: string;
   page_url: string;
   image_urls: string[];
+  extraction_quality?: ExtractionQuality;
   clicked_gallery: boolean;
   gallery_count: number | null;
   gallery_count_matches_extracted: boolean | null;

@@ -1,14 +1,19 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "../src/lib/concurrency";
 import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
 import { loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel } from "../src/openai-classifier";
-import { aggregateByPolicy, DEFAULT_LISTING_POLICY, isStrongEvidence, listingConfidence, type ClassificationRecordLike } from "../src/listing/aggregation";
+import { aggregateByPolicy, DEFAULT_LISTING_POLICY, listingConfidence, type ClassificationRecordLike } from "../src/listing/aggregation";
 import { runClassification } from "../src/classifier-runner";
-import { appendJsonl } from "../src/lib/jsonl";
-import type { Args, ImagePayload, LocationLabel, Verdict } from "../src/types";
+import { appendJsonl, writeJsonl } from "../src/lib/jsonl";
+import {
+  DEFAULT_ESCALATION_POLICY,
+  DEFAULT_MAX_ESCALATION_IMAGES,
+  selectEscalationIndexes,
+} from "../src/listing/escalation";
+import type { Args, ImagePayload, LocationLabel } from "../src/types";
 
 type ListingFixture = {
   id: string;
@@ -23,16 +28,19 @@ type RunArgs = {
   model: string;
   escalationModel: string;
   maxImages: number;
+  maxEscalationImages: number;
   concurrency: number;
   listingConcurrency: number;
+  modelCachePath: string;
   extractionCachePath: string;
   useExtractionCache: boolean;
+  useModelCache: boolean;
   refreshExtraction: boolean;
+  refreshModelCache: boolean;
+  shadowVerdictV2: boolean;
+  append: boolean;
+  runId: string;
 };
-
-function useBroadEscalationGate(): boolean {
-  return process.env.APARTMENT_FINDER_ESCALATION_GATE === "broad";
-}
 
 class UsageExit extends Error {
   constructor(public readonly exitCode: number) {
@@ -46,16 +54,22 @@ function usage(exitCode = 1): never {
 
 Options:
   --fixtures <path>          Listing fixture JSONL path. Defaults to fixtures/listings.jsonl.
-  --out <path>               Append summary-run JSONL records. Defaults to results/listing-summary-run.jsonl.
+  --out <path>               Write summary-run JSONL records. Defaults to results/listing-summary-run.jsonl.
   --extractions <path>       Optional prior result JSONL containing listing_photo_extraction records.
   --model <model>            First-pass model. Defaults to ${DEFAULT_MODEL}.
   --escalation-model <model> Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.
   --max-images <n>           Maximum photos per listing. Defaults to 35.
+  --max-escalation-images <n> Maximum photos to escalate per listing. Defaults to ${DEFAULT_MAX_ESCALATION_IMAGES}.
   --concurrency <n>          Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.
   --listing-concurrency <n>  Concurrent fixture listings. Defaults to ${DEFAULT_LISTING_CONCURRENCY}.
   --extraction-cache <path>  Listing photo extraction cache path. Defaults to ${DEFAULT_EXTRACTION_CACHE}.
+  --model-cache <path>       Model result cache path. Defaults to ${DEFAULT_MODEL_CACHE}.
   --refresh-extraction       Ignore cached listing extraction and write a fresh one.
+  --refresh-model-cache      Ignore cached model results and write fresh ones.
   --no-extraction-cache      Disable listing extraction reads and writes.
+  --no-model-cache           Disable model result cache reads and writes.
+  --append                   Append to --out instead of overwriting it.
+  --run-id <id>              Run identifier stored on summary records. Defaults to a timestamped id.
 `);
   throw new UsageExit(exitCode);
 }
@@ -67,11 +81,18 @@ function parseArgs(argv: string[]): RunArgs {
     model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     maxImages: 35,
+    maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
     concurrency: DEFAULT_CONCURRENCY,
     listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
+    modelCachePath: DEFAULT_MODEL_CACHE,
     extractionCachePath: DEFAULT_EXTRACTION_CACHE,
     useExtractionCache: true,
+    useModelCache: true,
     refreshExtraction: false,
+    refreshModelCache: false,
+    shadowVerdictV2: true,
+    append: false,
+    runId: `summary-${new Date().toISOString().replace(/[:.]/g, "-")}`,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -113,6 +134,14 @@ function parseArgs(argv: string[]): RunArgs {
         i += 1;
         break;
       }
+      case "--max-escalation-images": {
+        if (!next) usage();
+        const maxEscalationImages = Number.parseInt(next, 10);
+        if (!Number.isInteger(maxEscalationImages) || maxEscalationImages < 0) usage();
+        args.maxEscalationImages = maxEscalationImages;
+        i += 1;
+        break;
+      }
       case "--concurrency": {
         if (!next) usage();
         const concurrency = Number.parseInt(next, 10);
@@ -134,11 +163,30 @@ function parseArgs(argv: string[]): RunArgs {
         args.extractionCachePath = next;
         i += 1;
         break;
+      case "--model-cache":
+        if (!next) usage();
+        args.modelCachePath = next;
+        i += 1;
+        break;
       case "--refresh-extraction":
         args.refreshExtraction = true;
         break;
+      case "--refresh-model-cache":
+        args.refreshModelCache = true;
+        break;
       case "--no-extraction-cache":
         args.useExtractionCache = false;
+        break;
+      case "--no-model-cache":
+        args.useModelCache = false;
+        break;
+      case "--append":
+        args.append = true;
+        break;
+      case "--run-id":
+        if (!next) usage();
+        args.runId = next;
+        i += 1;
         break;
       default:
         usage();
@@ -203,36 +251,6 @@ function imageRecord(
   };
 }
 
-function isEscalationCandidate(record: ClassificationRecordLike, _firstPassAggregateLocation: string): boolean {
-  const verdict = record.verdict as Verdict | undefined;
-  if (!record.ok || !verdict) return false;
-  const verdictText = [
-    verdict.rationale,
-    ...verdict.visual_evidence,
-    ...verdict.in_unit_signals,
-    ...verdict.shared_space_signals,
-  ].join(" ").toLowerCase();
-  const looksLikeBoilerConfusion = /\b(boiler|water heater|calef[oó]n|termotanque|wall[- ]mounted|above (?:a )?(?:counter|sink)|kitchen appliance)\b/.test(verdictText);
-  const mentionsLaundryEvidence = /\b(washer|washing machine|laundry|laundromat|laundry room|lavarropas|lavasecarropas|lavadero|lavander[ií]a|shared laundry)\b/.test(verdictText);
-
-  if (useBroadEscalationGate() && _firstPassAggregateLocation === "UNKNOWN") return true;
-  if (verdict.location_label === "CONFLICTING") return true;
-  if (verdict.contains_washing_machine) return true;
-  if (mentionsLaundryEvidence) return true;
-  if (verdict.location_label === "IN_UNIT" && verdict.confidence < 0.98) return true;
-  if (verdict.location_label === "IN_UNIT" && looksLikeBoilerConfusion) return true;
-  if (verdict.location_label === "IN_UNIT" && verdict.washing_machine_visibility !== "clear") return true;
-  if (verdict.location_label === "SHARED_BUILDING" && !isStrongEvidence({
-    location_label: verdict.location_label,
-    contains_washing_machine: verdict.contains_washing_machine,
-    washing_machine_visibility: verdict.washing_machine_visibility,
-    confidence: verdict.confidence,
-    rationale: verdict.rationale,
-  }, "SHARED_BUILDING")) return true;
-
-  return false;
-}
-
 async function runSummaryFromExtraction(
   listing: ListingFixture,
   extraction: ExtractionRecord,
@@ -255,7 +273,12 @@ async function runSummaryFromExtraction(
   const firstPassRecords = await mapConcurrent(imageUrls, args.concurrency, async (imageUrl, index): Promise<unknown> => {
     try {
       const image = await loadImageFromUrl(imageUrl, DEFAULT_CACHE_DIR);
-      const result = await classifyWithModel(client, args.model, image, "auto");
+      const result = await classifyWithModel(client, args.model, image, "auto", {
+        modelCachePath: args.modelCachePath,
+        useModelCache: args.useModelCache,
+        refreshModelCache: args.refreshModelCache,
+        shadowVerdictV2: args.shadowVerdictV2,
+      });
       return imageRecord(image, result, {
         listing_url: listing.listing_url,
         listing_image_index: index,
@@ -278,25 +301,21 @@ async function runSummaryFromExtraction(
     Boolean(record && typeof record === "object" && "verdict" in record),
   );
   const firstPassAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, firstPassClassifications);
-  const firstPassByIndex = new Map<number, ClassificationRecordLike>();
-  for (const record of firstPassClassifications) {
-    if (typeof record.listing_image_index === "number") firstPassByIndex.set(record.listing_image_index, record);
-  }
-
-  const escalationIndexes = imageUrls
-    .map((_, index) => index)
-    .filter((index) => {
-      const record = firstPassByIndex.get(index);
-      return record
-        ? isEscalationCandidate(record, firstPassAggregate.predictedLocation)
-        : false;
-    });
+  const escalationIndexes = selectEscalationIndexes(firstPassClassifications, firstPassAggregate, {
+    maxImages: args.maxEscalationImages,
+    broadGate: process.env.APARTMENT_FINDER_ESCALATION_GATE === "broad",
+  });
 
   const escalationRecords = await mapConcurrent(escalationIndexes, args.concurrency, async (index): Promise<unknown> => {
     const imageUrl = imageUrls[index];
     try {
       const image = await loadImageFromUrl(imageUrl, DEFAULT_CACHE_DIR);
-      const result = await classifyWithModel(client, args.escalationModel, image, "auto");
+      const result = await classifyWithModel(client, args.escalationModel, image, "auto", {
+        modelCachePath: args.modelCachePath,
+        useModelCache: args.useModelCache,
+        refreshModelCache: args.refreshModelCache,
+        shadowVerdictV2: args.shadowVerdictV2,
+      });
       return imageRecord(image, result, {
         listing_url: listing.listing_url,
         listing_image_index: index,
@@ -330,6 +349,9 @@ async function runSummaryFromExtraction(
     decision: finalAggregate.predictedLocation,
     confidence: listingConfidence(finalAggregate),
     policy: DEFAULT_LISTING_POLICY,
+    run_id: args.runId,
+    escalation_policy: DEFAULT_ESCALATION_POLICY,
+    max_escalation_images: args.maxEscalationImages,
     first_pass_model: args.model,
     escalation_model: args.escalationModel,
     escalated_image_indexes: escalationIndexes,
@@ -357,11 +379,16 @@ async function main() {
       listingUrl: listing.listing_url,
       models: [args.model],
       cacheDir: DEFAULT_CACHE_DIR,
+      modelCachePath: args.modelCachePath,
       extractionCachePath: args.extractionCachePath,
       useExtractionCache: args.useExtractionCache,
+      useModelCache: args.useModelCache,
       refreshExtraction: args.refreshExtraction,
+      refreshModelCache: args.refreshModelCache,
+      shadowVerdictV2: args.shadowVerdictV2,
       detail: "auto",
       maxImages: args.maxImages,
+      maxEscalationImages: args.maxEscalationImages,
       concurrency: args.concurrency,
       listingSummary: true,
       escalationModel: args.escalationModel,
@@ -369,6 +396,7 @@ async function main() {
       stagedClassification: false,
       extractOnly: false,
       jsonOutput: true,
+      runId: args.runId,
     };
 
     return await (cachedExtraction
@@ -385,9 +413,17 @@ async function main() {
     }]);
   });
 
-  await appendJsonl(args.outPath, listingRecords.flat());
+  const flatRecords = listingRecords.flat();
+  if (args.append) {
+    await appendJsonl(args.outPath, flatRecords);
+  } else {
+    await writeJsonl(args.outPath, flatRecords);
+  }
 
-  console.log(`Wrote ${args.outPath}`);
+  console.log(`${args.append ? "Appended" : "Wrote"} ${args.outPath}`);
+  console.log(`run_id: ${args.runId}`);
+  console.log(`escalation_policy: ${DEFAULT_ESCALATION_POLICY}`);
+  console.log(`max_escalation_images: ${args.maxEscalationImages}`);
 }
 
 try {

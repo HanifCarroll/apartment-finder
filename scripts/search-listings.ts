@@ -6,8 +6,10 @@ import {
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
+  DEFAULT_MODEL_CACHE,
 } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
+import { DEFAULT_MAX_ESCALATION_IMAGES } from "../src/listing/escalation";
 import {
   defaultCommonScanOptions,
   type CommonScanCliOptions,
@@ -63,8 +65,12 @@ function parseArgs(argv: string[]): SearchArgs {
     .option("--model <model>", `First-pass model. Defaults to ${DEFAULT_MODEL}.`)
     .option("--escalation-model <id>", `Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.`)
     .option("--max-images <n>", `Maximum photos per listing. Defaults to ${DEFAULT_MAX_IMAGES}.`)
+    .option("--max-escalation-images <n>", `Maximum photos to escalate per listing. Defaults to ${DEFAULT_MAX_ESCALATION_IMAGES}.`)
     .option("--concurrency <n>", `Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.`)
     .option("--cache-dir <path>", `Image cache directory. Defaults to ${DEFAULT_CACHE_DIR}.`)
+    .option("--model-cache <path>", `Model result cache path. Defaults to ${DEFAULT_MODEL_CACHE}.`)
+    .option("--refresh-model-cache", "Ignore cached model results and write fresh model results.")
+    .option("--no-model-cache", "Disable model result cache reads and writes.")
     .option("--extraction-cache <path>", `Listing extraction cache path. Defaults to ${DEFAULT_EXTRACTION_CACHE}.`)
     .option("--refresh-extraction", "Ignore cached listing extraction and write fresh listing extractions.")
     .option("--no-extraction-cache", "Disable listing extraction reads and writes.")
@@ -96,8 +102,12 @@ function parseArgs(argv: string[]): SearchArgs {
     model?: string;
     escalationModel?: string;
     maxImages?: string;
+    maxEscalationImages?: string;
     concurrency?: string;
     cacheDir?: string;
+    modelCache?: string;
+    refreshModelCache?: boolean;
+    noModelCache?: boolean;
     extractionCache?: string;
     refreshExtraction?: boolean;
     noExtractionCache?: boolean;
@@ -131,8 +141,14 @@ function parseArgs(argv: string[]): SearchArgs {
     model: options.model || defaults.model,
     escalationModel: options.escalationModel || defaults.escalationModel,
     maxImages: options.maxImages ? parsePositiveInt(options.maxImages, "--max-images") : defaults.maxImages,
+    maxEscalationImages: options.maxEscalationImages
+      ? parseNonNegativeInt(options.maxEscalationImages, "--max-escalation-images")
+      : defaults.maxEscalationImages,
     concurrency: options.concurrency ? parsePositiveInt(options.concurrency, "--concurrency") : defaults.concurrency,
     cacheDir: options.cacheDir || defaults.cacheDir,
+    modelCachePath: options.modelCache || defaults.modelCachePath,
+    useModelCache: !options.noModelCache,
+    refreshModelCache: Boolean(options.refreshModelCache),
     extractionCachePath: options.extractionCache || defaults.extractionCachePath,
     useExtractionCache: !options.noExtractionCache,
     refreshExtraction: Boolean(options.refreshExtraction),
@@ -154,6 +170,12 @@ function parseArgs(argv: string[]): SearchArgs {
 function parsePositiveInt(value: string, name: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer.`);
+  return parsed;
+}
+
+function parseNonNegativeInt(value: string, name: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${name} must be a non-negative integer.`);
   return parsed;
 }
 

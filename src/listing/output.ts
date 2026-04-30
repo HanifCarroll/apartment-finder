@@ -1,4 +1,4 @@
-import type { LocationLabel } from "../types";
+import type { ExtractionQuality, LocationLabel } from "../types";
 import type { LaundryMetadataSignal } from "../types";
 import type { ListingAmenityGroup } from "../types";
 
@@ -26,7 +26,10 @@ export type ListingSummaryRecord = {
     washing_machine_visibility?: string;
     confidence?: number;
     rationale?: string;
+    shadow_verdict_v2?: unknown;
   }>;
+  escalated_image_indexes?: number[];
+  max_escalation_images?: number;
   error?: string;
 };
 
@@ -58,6 +61,7 @@ export type ListingExtractionRecord = {
   image_count?: number;
   gallery_count_matches_extracted?: boolean | null;
   extraction_source?: string;
+  extraction_quality?: ExtractionQuality;
   airbnb_laundry_amenity_label?: string;
   airbnb_laundry_amenity_text?: string;
   metadata_laundry_signals?: LaundryMetadataSignal[];

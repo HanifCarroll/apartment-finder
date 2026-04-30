@@ -5,10 +5,10 @@ import { logger } from "./lib/logger";
 import {
   DEFAULT_LISTING_POLICY,
   aggregateByPolicy,
-  isStrongEvidence,
   listingConfidence,
   type ClassificationRecordLike,
 } from "./listing/aggregation";
+import { DEFAULT_ESCALATION_POLICY, selectEscalationIndexes } from "./listing/escalation";
 import { extractListingImageUrls } from "./listing/extraction";
 import { classifyWithModel } from "./openai-classifier";
 import type { Args, ImagePayload, Verdict } from "./types";
@@ -34,10 +34,16 @@ async function classifyImagePayload(
   extra: Record<string, unknown> = {},
 ): Promise<unknown[]> {
   const records = [];
+  const modelOptions = {
+    modelCachePath: args.modelCachePath,
+    useModelCache: args.useModelCache,
+    refreshModelCache: args.refreshModelCache,
+    shadowVerdictV2: args.shadowVerdictV2,
+  };
 
   for (const model of args.models) {
     try {
-      const result = await classifyWithModel(client, model, image, args.detail);
+      const result = await classifyWithModel(client, model, image, args.detail, modelOptions);
       records.push({
         ok: true,
         created_at: new Date().toISOString(),
@@ -94,36 +100,6 @@ function imageRecord(
   };
 }
 
-function isEscalationCandidate(record: ClassificationRecordLike, _firstPassAggregateLocation: string): boolean {
-  const verdict = record.verdict;
-  if (!record.ok || !verdict) return false;
-  const verdictText = [
-    verdict.rationale,
-    ...verdict.visual_evidence,
-    ...verdict.in_unit_signals,
-    ...verdict.shared_space_signals,
-  ].join(" ").toLowerCase();
-  const looksLikeBoilerConfusion = /\b(boiler|water heater|calef[oó]n|termotanque|wall[- ]mounted|above (?:a )?(?:counter|sink)|kitchen appliance)\b/.test(verdictText);
-  const mentionsLaundryEvidence = /\b(washer|washing machine|laundry|laundromat|laundry room|lavarropas|lavasecarropas|lavadero|lavander[ií]a|shared laundry)\b/.test(verdictText);
-
-  if (useBroadEscalationGate() && _firstPassAggregateLocation === "UNKNOWN") return true;
-  if (verdict.location_label === "CONFLICTING") return true;
-  if (verdict.contains_washing_machine) return true;
-  if (mentionsLaundryEvidence) return true;
-  if (verdict.location_label === "IN_UNIT" && verdict.confidence < 0.98) return true;
-  if (verdict.location_label === "IN_UNIT" && looksLikeBoilerConfusion) return true;
-  if (verdict.location_label === "IN_UNIT" && verdict.washing_machine_visibility !== "clear") return true;
-  if (verdict.location_label === "SHARED_BUILDING" && !isStrongEvidence({
-    location_label: verdict.location_label,
-    contains_washing_machine: verdict.contains_washing_machine,
-    washing_machine_visibility: verdict.washing_machine_visibility,
-    confidence: verdict.confidence,
-    rationale: verdict.rationale,
-  }, "SHARED_BUILDING")) return true;
-
-  return false;
-}
-
 function airbnbAmenityDecision(extraction: {
   provider?: string;
   airbnb_laundry_amenity_label?: string;
@@ -156,6 +132,9 @@ function listingSummaryRecord(args: Args, extraction: Awaited<ReturnType<typeof 
     airbnb_laundry_amenity_label: extraction.airbnb_laundry_amenity_label,
     airbnb_laundry_amenity_text: extraction.airbnb_laundry_amenity_text,
     policy: DEFAULT_LISTING_POLICY,
+    run_id: args.runId,
+    escalation_policy: DEFAULT_ESCALATION_POLICY,
+    max_escalation_images: args.maxEscalationImages,
     first_pass_model: args.models[0],
     escalation_model: args.escalationModel,
     escalated_image_indexes: values.escalatedImageIndexes || [],
@@ -176,6 +155,8 @@ async function classifyListing(args: Args): Promise<unknown[]> {
     provider: extraction.provider,
     imageCount: extraction.image_urls.length,
     galleryCount: extraction.gallery_count,
+    extractionQualityScore: extraction.extraction_quality?.score,
+    extractionQualityStatus: extraction.extraction_quality?.status,
     extractionSource: extraction.extraction_source,
     durationMs: Math.round(performance.now() - extractionStartedAt),
   });
@@ -280,7 +261,11 @@ async function classifyListing(args: Args): Promise<unknown[]> {
       return flattened;
     };
 
-    const buildSummary = async (firstPassRecords: ClassificationRecordLike[], classifiedIndexes: number[]) => {
+    const buildSummary = async (
+      firstPassRecords: ClassificationRecordLike[],
+      classifiedIndexes: number[],
+      options: { performEscalation: boolean },
+    ) => {
       const aggregateStartedAt = performance.now();
       const firstPassAggregate = aggregateByPolicy(DEFAULT_LISTING_POLICY, firstPassRecords);
       logger.info({
@@ -292,20 +277,20 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         predictedLocation: firstPassAggregate.predictedLocation,
         durationMs: Math.round(performance.now() - aggregateStartedAt),
       });
-      const firstPassRecordsByIndex = new Map<number, ClassificationRecordLike>();
-      for (const record of firstPassRecords) {
-        if (typeof record.listing_image_index === "number") {
-          firstPassRecordsByIndex.set(record.listing_image_index, record);
-        }
-      }
-
-      const escalationIndexes = classifiedIndexes.filter((index) => {
-        const record = firstPassRecordsByIndex.get(index);
-        return record ? isEscalationCandidate(record, firstPassAggregate.predictedLocation) : false;
-      });
+      const classifiedSet = new Set(classifiedIndexes);
+      const escalationIndexes = options.performEscalation
+        ? selectEscalationIndexes(
+          firstPassRecords.filter((record) => classifiedSet.has(record.listing_image_index ?? -1)),
+          firstPassAggregate,
+          {
+            maxImages: args.maxEscalationImages,
+            broadGate: useBroadEscalationGate(),
+          },
+        )
+        : [];
 
       const escalationStartedAt = performance.now();
-      const escalationRecords = await mapConcurrent(
+      const escalationRecords = options.performEscalation ? await mapConcurrent(
         escalationIndexes,
         args.concurrency,
         async (index): Promise<unknown> => {
@@ -324,7 +309,12 @@ async function classifyListing(args: Args): Promise<unknown[]> {
               durationMs: Math.round(performance.now() - imageLoadStartedAt),
             });
             const escalationImageStartedAt = performance.now();
-            const result = await classifyWithModel(client, args.escalationModel, image, args.detail);
+            const result = await classifyWithModel(client, args.escalationModel, image, args.detail, {
+              modelCachePath: args.modelCachePath,
+              useModelCache: args.useModelCache,
+              refreshModelCache: args.refreshModelCache,
+              shadowVerdictV2: args.shadowVerdictV2,
+            });
             logger.info({
               event: "image_phase_finished",
               phase: "classify_escalation",
@@ -353,7 +343,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
             };
           }
         },
-      );
+      ) : [];
       logger.info({
         event: "listing_phase_finished",
         phase: "escalation",
@@ -407,13 +397,14 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         const classifiedIndexes = allIndexes.filter((index) =>
           firstPassRecords.some((record) => record.listing_image_index === index),
         );
-        const candidateSummary = await buildSummary(firstPassRecords, classifiedIndexes);
+        const candidateSummary = await buildSummary(firstPassRecords, classifiedIndexes, { performEscalation: false });
         const decision = candidateSummary.summary.decision;
         const confidence = candidateSummary.summary.confidence;
 
         if ((decision === "IN_UNIT" || decision === "SHARED_BUILDING") && confidence === "high") {
-          records.push(...candidateSummary.escalationRecords);
-          records.push(candidateSummary.summary);
+          const finalSummary = await buildSummary(firstPassRecords, classifiedIndexes, { performEscalation: true });
+          records.push(...finalSummary.escalationRecords);
+          records.push(finalSummary.summary);
           return records;
         }
       }
@@ -432,7 +423,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
       );
       const summary = await buildSummary(firstPassRecords, allIndexes.filter((index) =>
         firstPassRecords.some((record) => record.listing_image_index === index),
-      ));
+      ), { performEscalation: true });
       records.push(...summary.escalationRecords);
       records.push(summary.summary);
     }

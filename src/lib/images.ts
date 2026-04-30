@@ -1,6 +1,15 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { Args, ImagePayload } from "../types";
+
+function sha256Buffer(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+function sha256Text(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
 
 function mimeFromPath(path: string): string {
   const ext = extname(path).toLowerCase();
@@ -110,11 +119,37 @@ export async function loadImageFromPath(path: string): Promise<ImagePayload> {
     source: path,
     contentType,
     bytes: buffer.byteLength,
+    sha256: sha256Buffer(buffer),
     dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`,
   };
 }
 
 export async function loadImageFromUrl(url: string, cacheDir: string): Promise<ImagePayload> {
+  await mkdir(cacheDir, { recursive: true });
+
+  const urlObject = new URL(url);
+  const baseName = basename(urlObject.pathname).replace(/[^a-zA-Z0-9._-]/g, "_") || "image";
+  const hasImageExtension = /\.(jpe?g|png|webp|gif)$/i.test(baseName);
+  const cacheKey = sha256Text(url);
+  const fallbackExtension = hasImageExtension ? extname(baseName) : ".img";
+  const cachedPath = join(cacheDir, `${cacheKey}${fallbackExtension}`);
+  try {
+    const cachedBuffer = await readFile(cachedPath);
+    const contentType = imageTypeFromBytes(cachedBuffer) || mimeFromPath(cachedPath);
+    return {
+      source: url,
+      contentType,
+      bytes: cachedBuffer.byteLength,
+      sha256: sha256Buffer(cachedBuffer),
+      cachedPath,
+      dataUrl: `data:${contentType};base64,${cachedBuffer.toString("base64")}`,
+    };
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || (error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
   let image: Awaited<ReturnType<typeof fetchImageBuffer>> | null = null;
   const errors: string[] = [];
   for (const candidateUrl of airbnbImageVariants(url)) {
@@ -130,20 +165,17 @@ export async function loadImageFromUrl(url: string, cacheDir: string): Promise<I
     throw new Error(`Image download failed after ${errors.length} attempt(s): ${errors.join(" | ")}`);
   }
 
-  await mkdir(cacheDir, { recursive: true });
-
-  const urlObject = new URL(url);
-  const baseName = basename(urlObject.pathname).replace(/[^a-zA-Z0-9._-]/g, "_") || "image";
-  const hasImageExtension = /\.(jpe?g|png|webp|gif)$/i.test(baseName);
-  const slug = `${Date.now()}-${baseName}${hasImageExtension ? "" : extensionForContentType(image.contentType)}`;
-  const cachedPath = join(cacheDir, slug);
-  await writeFile(cachedPath, image.buffer);
+  const contentPath = fallbackExtension === ".img"
+    ? join(cacheDir, `${cacheKey}${extensionForContentType(image.contentType)}`)
+    : cachedPath;
+  await writeFile(contentPath, image.buffer);
 
   return {
     source: url,
     contentType: image.contentType,
     bytes: image.buffer.byteLength,
-    cachedPath,
+    sha256: sha256Buffer(image.buffer),
+    cachedPath: contentPath,
     dataUrl: `data:${image.contentType};base64,${image.buffer.toString("base64")}`,
   };
 }
