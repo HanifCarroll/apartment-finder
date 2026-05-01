@@ -5,6 +5,7 @@ import type { ListingExtraction, PlaywriterListingPayload } from "../types";
 
 const PLAYWRITER_JSON_START = "__APARTMENT_FINDER_JSON_START__";
 const PLAYWRITER_JSON_END = "__APARTMENT_FINDER_JSON_END__";
+let zonapropFastSessionId: string | null = null;
 
 function normalizeZonapropImageUrl(url: string): string {
   return url
@@ -264,15 +265,127 @@ console.log(${JSON.stringify(PLAYWRITER_JSON_END)});
 `;
 }
 
-export async function extractListingImageUrlsWithPlaywriter(
-  listingUrl: string,
-  maxImages: number,
-): Promise<ListingExtraction> {
-  const sessionId = createPlaywriterSession();
-  const stdout = runPlaywriterScript(sessionId, createPlaywriterListingExtractionScript(listingUrl, maxImages), 100_000);
-  const payload = parsePlaywriterJson<PlaywriterListingPayload>(stdout, PLAYWRITER_JSON_START, PLAYWRITER_JSON_END);
-  const imageUrls = uniqueZonapropImageUrls(payload.image_urls, maxImages);
+function createPlaywriterFastHtmlExtractionScript(listingUrl: string, maxImages: number): string {
+  return `
+const listingUrl = ${JSON.stringify(listingUrl)};
+const maxImages = ${JSON.stringify(maxImages)};
 
+state.page = context.pages().find((p) => p.url() === 'about:blank') ?? await context.newPage();
+if (!state.page.url().startsWith('https://www.zonaprop.com.ar/')) {
+  await state.page.goto('https://www.zonaprop.com.ar/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefined);
+}
+
+const payload = {
+  ...await state.page.evaluate(async ({ listingUrl, maxImages }) => {
+    function normalizeImageUrl(url) {
+      return String(url || '').replace(/\\/\\d+x\\d+\\//, '/1200x1200/').replace(/[?#].*$/, '');
+    }
+    function photoId(url) {
+      return normalizeImageUrl(url).match(/\\/([^/?#]+)\\.(?:jpe?g|webp|png)$/i)?.[1] || normalizeImageUrl(url);
+    }
+    function uniqueZonapropImageUrls(urls) {
+      const byId = new Map();
+      for (const rawUrl of urls) {
+        if (!rawUrl.includes('imgar.zonapropcdn.com/avisos/resize/')) continue;
+        const url = normalizeImageUrl(rawUrl);
+        byId.set(photoId(url), url);
+      }
+      return Array.from(byId.values()).slice(0, maxImages * 4);
+    }
+    function cleanText(text) {
+      const div = document.createElement('div');
+      div.innerHTML = String(text || '');
+      return (div.textContent || div.innerText || '')
+        .replace(/\\s+/g, ' ')
+        .trim();
+    }
+    function metaContent(doc, key) {
+      const selector = [
+        \`meta[property="\${key}"]\`,
+        \`meta[name="\${key}"]\`,
+      ].join(',');
+      return cleanText(doc.querySelector(selector)?.getAttribute('content') || '');
+    }
+    function collectHtmlImageUrls(html) {
+      const urls = new Set();
+      const pattern = /https?:\\/\\/imgar\\.zonapropcdn\\.com\\/avisos\\/[^"\\s<>]+?\\.(?:jpe?g|webp|png)(?:\\?[^"\\s<>]*)?/gi;
+      for (const match of html.matchAll(pattern)) urls.add(match[0]);
+      return Array.from(urls);
+    }
+    function extractGalleryMeta(doc) {
+      const text = cleanText(doc.body?.textContent || '');
+      const count = Number(text.match(/(?:^|\\s)(\\d{1,3})\\s+Ver todas las fotos/i)?.[1]);
+      return {
+        gallery_count: Number.isFinite(count) ? count : null,
+        gallery_text: text.match(/.{0,80}Ver todas las fotos.{0,80}/i)?.[0] || '',
+      };
+    }
+    function extractListingMeta(doc) {
+      const bodyText = cleanText(doc.body?.textContent || '');
+      const price = bodyText.match(/\\b(?:USD|US\\$|U\\$S)\\s*([\\d.,]+)/i)?.[0] || '';
+      const ambientes = Number(bodyText.match(/\\b(\\d{1,2})\\s*(?:amb\\.?|ambientes?)\\b/i)?.[1] || '') || undefined;
+      const dormitorios = Number(bodyText.match(/\\b(\\d{1,2})\\s*(?:dorm\\.?|dormitorios?|habitaciones?)\\b/i)?.[1] || '') || undefined;
+      const featureItems = Array.from(doc.querySelectorAll('#section-icon-features-property li, .section-icon-features-property li'))
+        .map((item) => cleanText(item.textContent || ''))
+        .filter(Boolean);
+      const findFeature = (pattern) => featureItems.find((item) => pattern.test(item)) || '';
+      const parseFeatureNumber = (pattern) => Number(findFeature(pattern).match(/\\d{1,4}/)?.[0] || '') || undefined;
+      const descriptionContainers = Array.from(doc.querySelectorAll('[class*="description"], [id*="description"], [data-qa*="description"]'))
+        .map((item) => cleanText(item.textContent || ''))
+        .filter((text) => text && !/Leer descripción completa/i.test(text))
+        .sort((a, b) => b.length - a.length);
+      const description = descriptionContainers[0] || metaContent(doc, 'og:description') || metaContent(doc, 'description');
+      const expenses = description.match(/\\b(?:expensas?|gastos)[^$]{0,80}((?:USD|US\\$|U\\$S|\\$)\\s*[\\d.,]+)/i)?.[1]
+        || bodyText.match(/\\b(?:expensas?|gastos)[^$]{0,80}((?:USD|US\\$|U\\$S|\\$)\\s*[\\d.,]+)/i)?.[1]
+        || '';
+      return {
+        listing_title: metaContent(doc, 'og:title') || cleanText(doc.querySelector('h1')?.textContent || ''),
+        listing_description: description,
+        listing_price_text: price,
+        listing_expenses_text: expenses,
+        listing_total_area_m2: parseFeatureNumber(/m²\\s*tot|m2\\s*tot/i),
+        listing_covered_area_m2: parseFeatureNumber(/m²\\s*cub|m2\\s*cub/i),
+        listing_ambientes: ambientes,
+        listing_dormitorios: dormitorios,
+        listing_bathrooms: parseFeatureNumber(/ba[nñ]o/i),
+        listing_age_years: parseFeatureNumber(/a[nñ]os/i),
+        listing_disposition: findFeature(/Contrafrente|Frente|Lateral|Interno/i) || undefined,
+        listing_orientation: findFeature(/^(N|S|E|O|NE|NO|SE|SO)$/i) || undefined,
+        listing_luminosity: findFeature(/luminoso/i) || undefined,
+        listing_features: featureItems,
+      };
+    }
+
+    const response = await fetch(listingUrl, {
+      credentials: 'include',
+      headers: { accept: 'text/html,application/xhtml+xml' },
+    });
+    const html = await response.text();
+    if (!response.ok) throw new Error('Zonaprop fast HTML fetch failed with HTTP ' + response.status);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const galleryMeta = extractGalleryMeta(doc);
+    const imageUrls = uniqueZonapropImageUrls(collectHtmlImageUrls(html));
+    const galleryCount = galleryMeta.gallery_count ?? imageUrls.length;
+    return {
+      listing_url: listingUrl,
+      ...extractListingMeta(doc),
+      page_url: response.url,
+      clicked_gallery: false,
+      gallery_count: galleryCount,
+      gallery_text: galleryMeta.gallery_text || \`\${galleryCount} fotos\`,
+      image_urls: imageUrls,
+    };
+  }, { listingUrl, maxImages }),
+};
+console.log(${JSON.stringify(PLAYWRITER_JSON_START)});
+console.log(JSON.stringify(payload));
+console.log(${JSON.stringify(PLAYWRITER_JSON_END)});
+`;
+}
+
+function finalizeZonapropExtraction(payload: PlaywriterListingPayload, sessionId: string, maxImages: number): ListingExtraction {
+  const imageUrls = uniqueZonapropImageUrls(payload.image_urls, maxImages);
   const baseExtraction = {
     ...payload,
     session_id: sessionId,
@@ -285,6 +398,54 @@ export async function extractListingImageUrlsWithPlaywriter(
     ...baseExtraction,
     ...deriveListingDetails(baseExtraction),
   };
+}
+
+function isUsableZonapropFastExtraction(extraction: ListingExtraction): boolean {
+  return extraction.image_urls.length >= Math.min(3, extraction.gallery_count ?? 3) &&
+    Boolean(extraction.listing_title?.trim() || extraction.listing_description?.trim());
+}
+
+async function extractListingImageUrlsFastWithPlaywriter(
+  listingUrl: string,
+  maxImages: number,
+): Promise<ListingExtraction> {
+  zonapropFastSessionId ??= createPlaywriterSession();
+  try {
+    const stdout = runPlaywriterScript(
+      zonapropFastSessionId,
+      createPlaywriterFastHtmlExtractionScript(listingUrl, maxImages),
+      60_000,
+    );
+    const payload = parsePlaywriterJson<PlaywriterListingPayload>(stdout, PLAYWRITER_JSON_START, PLAYWRITER_JSON_END);
+    return finalizeZonapropExtraction(payload, zonapropFastSessionId, maxImages);
+  } catch (error) {
+    zonapropFastSessionId = null;
+    throw error;
+  }
+}
+
+export async function extractListingImageUrlsWithPlaywriter(
+  listingUrl: string,
+  maxImages: number,
+): Promise<ListingExtraction> {
+  const sessionId = createPlaywriterSession();
+  const stdout = runPlaywriterScript(sessionId, createPlaywriterListingExtractionScript(listingUrl, maxImages), 100_000);
+  const payload = parsePlaywriterJson<PlaywriterListingPayload>(stdout, PLAYWRITER_JSON_START, PLAYWRITER_JSON_END);
+  return finalizeZonapropExtraction(payload, sessionId, maxImages);
+}
+
+export async function extractZonapropListingImageUrls(
+  listingUrl: string,
+  maxImages: number,
+): Promise<ListingExtraction> {
+  try {
+    const extraction = await extractListingImageUrlsFastWithPlaywriter(listingUrl, maxImages);
+    if (isUsableZonapropFastExtraction(extraction)) return extraction;
+  } catch {
+    // The rendered path below is slower but still the quality fallback for Cloudflare or payload drift.
+  }
+
+  return extractListingImageUrlsWithPlaywriter(listingUrl, maxImages);
 }
 
 export async function findListingUrlsWithPlaywriter(

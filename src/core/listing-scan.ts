@@ -8,6 +8,7 @@ import {
   type ListingSummaryRecord,
 } from "../listing/output";
 import type { Args } from "../types";
+import { DEFAULT_STAGED_CLASSIFICATION } from "./defaults";
 
 export type ListingScanOptions = {
   model: string;
@@ -51,7 +52,7 @@ export function toListingSummaryArgs(listingUrl: string, options: ListingScanOpt
     listingSummary: true,
     escalationModel: options.escalationModel,
     classifyAll: true,
-    stagedClassification: options.stagedClassification ?? false,
+    stagedClassification: options.stagedClassification ?? DEFAULT_STAGED_CLASSIFICATION,
     extractOnly: false,
     jsonOutput: true,
   };

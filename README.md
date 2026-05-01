@@ -53,7 +53,7 @@ bun run classify --image ./fixtures/known-in-unit.jpg --models gpt-5.4-mini
 
 Supported providers:
 
-- Zonaprop: browser extraction with Playwriter.
+- Zonaprop: Playwriter-backed same-origin HTML extraction with rendered Playwriter fallback.
 - Argenprop: gallery endpoint extraction.
 - Airbnb: JSON API extraction through the web `StaysPdpSections` endpoint, including washer amenity metadata when the page says `Washer`, `Washer - in unit`, or `Washer - in building`.
 
@@ -315,13 +315,15 @@ Supported generated-filter fields:
 
 Generated Zonaprop and Argenprop searches always include `amoblado`. Airbnb generated searches include `amenities[]=33` for washer, `room_types[]=Entire home/apt`, and ignore `ambientes`/`dormitorios` because Airbnb does not expose those filters in the same way.
 
+Search scans use staged listing classification by default across CLI and web: the first photo batch is classified, then the scan expands only while the listing decision is still uncertain. Evaluation scripts can still force full-gallery behavior when comparing model accuracy.
+
 Supported search providers:
 
 - Zonaprop search pages
 - Argenprop search pages
 - Airbnb search pages
 
-Search discovery uses local Playwright for Argenprop and Airbnb. Zonaprop stays on Playwriter because local Playwright and Browserbase currently hit the site's bot check.
+Search discovery uses local Playwright for Argenprop and Airbnb. Zonaprop stays on Playwriter because local Playwright and Browserbase currently hit the site's bot check. Zonaprop listing extraction first uses a same-origin HTML fetch inside the Playwriter browser session, then falls back to rendered gallery extraction if the embedded payload is incomplete.
 
 When you pass a raw URL, that provider URL remains the source of truth for filters such as neighborhood, furnished, washer amenity, dates, and max dollar amount. For Airbnb, pass a URL or generated filters with `checkin` and `checkout` when you want date-specific availability and pricing.
 

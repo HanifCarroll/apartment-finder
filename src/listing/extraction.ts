@@ -6,7 +6,7 @@ import {
 } from "../extraction-cache";
 import { logger } from "../lib/logger";
 import type { Args, ListingExtraction } from "../types";
-import { extractListingImageUrlsWithPlaywriter } from "../providers/zonaprop";
+import { extractZonapropListingImageUrls } from "../providers/zonaprop";
 import { scoreListingExtraction } from "./extraction-quality";
 
 const MAX_EXTRACTION_ATTEMPTS = 3;
@@ -39,7 +39,7 @@ async function extractLiveListingImageUrls(
 
   return {
     provider,
-    ...await extractListingImageUrlsWithPlaywriter(listingUrl, maxImages),
+    ...await extractZonapropListingImageUrls(listingUrl, maxImages),
   };
 }
 

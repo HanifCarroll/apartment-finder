@@ -1,17 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
-  DEFAULT_CACHE_DIR,
   DEFAULT_ESCALATION_MODEL,
-  DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
   DEFAULT_MODEL,
-  DEFAULT_MODEL_CACHE,
 } from "@/cli/args";
-import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "@/lib/concurrency";
 import { DEFAULT_MAX_ESCALATION_IMAGES } from "@/listing/escalation";
 import { deriveListingDetails } from "@/listing/details";
 import { appendListingFeedback } from "@/feedback";
+import { defaultSearchScanOptions } from "@/core";
 
 const SearchRequestSchema = z.object({
   mode: z.enum(["url", "filters"]),
@@ -219,27 +216,15 @@ async function prepareSearchScan(data: SearchRequest) {
     searchUrl,
     warnings,
     ignored,
-    scanOptions: {
+    scanOptions: defaultSearchScanOptions({
       model: data.model,
       escalationModel: data.escalationModel,
       maxImages: data.maxImages,
       maxEscalationImages: data.maxEscalationImages,
-      concurrency: DEFAULT_CONCURRENCY,
-      cacheDir: DEFAULT_CACHE_DIR,
-      modelCachePath: DEFAULT_MODEL_CACHE,
-      extractionCachePath: DEFAULT_EXTRACTION_CACHE,
-      useExtractionCache: true,
-      useModelCache: true,
-      refreshExtraction: false,
-      refreshModelCache: false,
-      shadowVerdictV2: true,
-      stagedClassification: true,
       maxListings: data.maxListings,
       maxPages: data.maxPages,
       includeAll: true,
-      discoverOnly: false,
-      listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
-    },
+    }),
   };
 }
 

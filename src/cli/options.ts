@@ -1,14 +1,4 @@
-import {
-  DEFAULT_CACHE_DIR,
-  DEFAULT_ESCALATION_MODEL,
-  DEFAULT_EXTRACTION_CACHE,
-  DEFAULT_MAX_IMAGES,
-  DEFAULT_MODEL,
-  DEFAULT_MODEL_CACHE,
-} from "./args";
-import { DEFAULT_CONCURRENCY } from "../lib/concurrency";
-import type { ListingScanOptions } from "../core";
-import { DEFAULT_MAX_ESCALATION_IMAGES } from "../listing/escalation";
+import { defaultListingScanOptions, type ListingScanOptions } from "../core";
 
 export type CommonScanCliOptions = ListingScanOptions & {
   outPath?: string;
@@ -17,20 +7,7 @@ export type CommonScanCliOptions = ListingScanOptions & {
 
 export function defaultCommonScanOptions(): CommonScanCliOptions {
   return {
-    model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-    escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
-    maxImages: DEFAULT_MAX_IMAGES,
-    maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
-    concurrency: DEFAULT_CONCURRENCY,
-    cacheDir: DEFAULT_CACHE_DIR,
-    modelCachePath: DEFAULT_MODEL_CACHE,
-    extractionCachePath: DEFAULT_EXTRACTION_CACHE,
-    useExtractionCache: true,
-    useModelCache: true,
-    refreshExtraction: false,
-    refreshModelCache: false,
-    shadowVerdictV2: true,
-    stagedClassification: false,
+    ...defaultListingScanOptions(),
     jsonOutput: false,
   };
 }

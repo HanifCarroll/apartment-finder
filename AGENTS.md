@@ -39,6 +39,6 @@ bun run eval:listing-summaries --results results/listing-summary-run.jsonl
 
 ## Current Providers
 
-- Zonaprop: Playwriter extraction, reads embedded gallery URLs before falling back to `Ver todas las fotos`.
+- Zonaprop: Playwriter-backed same-origin HTML extraction first, falling back to rendered Playwriter extraction and `Ver todas las fotos` only when needed.
 - Argenprop: HTTP extraction from `gallerypartial`, ignores video counts.
 - Airbnb: adapter-backed extraction. Default API adapter replays the web `StaysPdpSections` JSON endpoint and can fall back to the HTML page payload adapter; `AIRBNB_EXTRACTION_ADAPTER=html|api` forces either path.

@@ -1,13 +1,22 @@
 import type { Args } from "../types";
 import { DEFAULT_CONCURRENCY } from "../lib/concurrency";
 import { DEFAULT_MAX_ESCALATION_IMAGES } from "../listing/escalation";
-
-export const DEFAULT_MODEL = "gpt-5.4-mini";
-export const DEFAULT_ESCALATION_MODEL = "gpt-5.4";
-export const DEFAULT_CACHE_DIR = ".apartment-laundry-cache";
-export const DEFAULT_EXTRACTION_CACHE = `${DEFAULT_CACHE_DIR}/extractions.jsonl`;
-export const DEFAULT_MODEL_CACHE = `${DEFAULT_CACHE_DIR}/model-results.jsonl`;
-export const DEFAULT_MAX_IMAGES = 60;
+export {
+  DEFAULT_CACHE_DIR,
+  DEFAULT_ESCALATION_MODEL,
+  DEFAULT_EXTRACTION_CACHE,
+  DEFAULT_MAX_IMAGES,
+  DEFAULT_MODEL,
+  DEFAULT_MODEL_CACHE,
+} from "../core/defaults";
+import {
+  DEFAULT_CACHE_DIR,
+  DEFAULT_ESCALATION_MODEL,
+  DEFAULT_EXTRACTION_CACHE,
+  DEFAULT_MAX_IMAGES,
+  DEFAULT_MODEL,
+  DEFAULT_MODEL_CACHE,
+} from "../core/defaults";
 
 function usage(exitCode = 1): never {
   console.error(`Usage:
