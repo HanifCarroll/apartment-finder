@@ -11,7 +11,7 @@ export const logger = pino(
   },
   pino.destination({
     dest: process.env.APP_LOG_PATH || "logs/app.log",
-    sync: false,
+    sync: true,
     mkdir: true,
   }),
 );
