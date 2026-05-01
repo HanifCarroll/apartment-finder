@@ -316,9 +316,10 @@ const payload = {
     function extractGalleryMeta(doc) {
       const text = cleanText(doc.body?.textContent || '');
       const count = Number(text.match(/(?:^|\\s)(\\d{1,3})\\s+Ver todas las fotos/i)?.[1]);
+      const galleryCount = Number.isFinite(count) ? count : null;
       return {
-        gallery_count: Number.isFinite(count) ? count : null,
-        gallery_text: text.match(/.{0,80}Ver todas las fotos.{0,80}/i)?.[0] || '',
+        gallery_count: galleryCount,
+        gallery_text: galleryCount === null ? '' : \`\${galleryCount} fotos\`,
       };
     }
     function extractListingMeta(doc) {
