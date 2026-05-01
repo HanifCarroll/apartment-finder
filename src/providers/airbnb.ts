@@ -1,5 +1,5 @@
 import type { ListingExtraction } from "../types";
-import { classifyAirbnbLaundryAmenitySignal } from "../laundry-metadata";
+import { classifyAirbnbDescriptionLaundrySignal, classifyAirbnbLaundryAmenitySignal } from "../laundry-metadata";
 import { deriveListingDetails } from "../listing/details";
 
 const AIRBNB_API_KEY = "d306zoyjsyarp7ifhu67rjxn52tv0t20";
@@ -461,14 +461,16 @@ async function extractAirbnbListingWithApi(
   const airbnbSignal = laundryAmenity.airbnb_laundry_amenity_text
     ? classifyAirbnbLaundryAmenitySignal(laundryAmenity.airbnb_laundry_amenity_text)
     : null;
+  const listingDescription = textFromHtml(stringField(htmlDescription, "htmlText")) || stringField(titleSection, "title") || "";
+  const descriptionSignal = classifyAirbnbDescriptionLaundrySignal(listingDescription);
 
   const baseExtraction = {
     provider: "airbnb",
     listing_title: stringField(sharingConfig, "title") || stringField(titleSection, "title"),
-    listing_description: textFromHtml(stringField(htmlDescription, "htmlText")) || stringField(titleSection, "title"),
+    listing_description: listingDescription,
     listing_amenities: amenityGroups,
     ...laundryAmenity,
-    metadata_laundry_signals: airbnbSignal ? [airbnbSignal] : [],
+    metadata_laundry_signals: [airbnbSignal, descriptionSignal].filter((signal): signal is NonNullable<typeof signal> => Boolean(signal)),
     listing_url: listingUrl,
     page_url: new URL(`/rooms/${roomId}`, "https://www.airbnb.com").href,
     image_urls: imageUrls,
@@ -496,15 +498,17 @@ async function extractAirbnbListingWithHtml(
   const airbnbSignal = laundryAmenity.airbnb_laundry_amenity_text
     ? classifyAirbnbLaundryAmenitySignal(laundryAmenity.airbnb_laundry_amenity_text)
     : null;
+  const listingDescription = parseMetaContent(html, "og:description") || parseMetaContent(html, "description");
+  const descriptionSignal = classifyAirbnbDescriptionLaundrySignal(listingDescription);
 
   const baseExtraction = {
     provider: "airbnb",
     listing_title: parseMetaContent(html, "og:title"),
-    listing_description: parseMetaContent(html, "og:description") || parseMetaContent(html, "description"),
+    listing_description: listingDescription,
     listing_price_text: parseAirbnbPrice(html),
     listing_amenities: parseAirbnbAmenities(html),
     ...laundryAmenity,
-    metadata_laundry_signals: airbnbSignal ? [airbnbSignal] : [],
+    metadata_laundry_signals: [airbnbSignal, descriptionSignal].filter((signal): signal is NonNullable<typeof signal> => Boolean(signal)),
     listing_url: listingUrl,
     page_url: new URL(`/rooms/${roomId}`, "https://www.airbnb.com").href,
     image_urls: imageUrls,

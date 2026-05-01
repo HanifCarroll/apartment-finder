@@ -133,7 +133,7 @@ export type PlaywriterListingPayload = Omit<
 >;
 
 export type LaundryMetadataSignal = {
-  source: "airbnb_amenity";
+  source: "airbnb_amenity" | "airbnb_description";
   classification: "IN_UNIT" | "SHARED_BUILDING" | "WASHER_PRESENT" | "AMBIGUOUS";
   strength: "strong" | "medium" | "weak";
   text: string;

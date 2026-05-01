@@ -97,10 +97,11 @@ function bestEvidenceUrl(summary: ListingSummaryRecord): string {
 }
 
 function formatDecisionSource(summary: ListingSummaryRecord): string {
-  if (summary.decision_source === "airbnb_amenity") {
-    const text = summary.airbnb_laundry_amenity_text || summary.airbnb_laundry_amenity_label || "Airbnb washer amenity";
+  if (summary.decision_source === "airbnb_amenity" || summary.decision_source === "airbnb_metadata") {
+    const metadataText = summary.metadata_laundry_signals?.find((signal) => signal.strength === "strong")?.text;
+    const text = metadataText || summary.airbnb_laundry_amenity_text || summary.airbnb_laundry_amenity_label || "Airbnb washer metadata";
     const vision = summary.vision_decision ? `, vision ${summary.vision_decision}` : "";
-    return `source: airbnb_amenity (${text}${vision})`;
+    return `source: ${summary.decision_source} (${text}${vision})`;
   }
 
   return `source: ${summary.decision_source || "vision"}`;

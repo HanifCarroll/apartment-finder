@@ -100,10 +100,15 @@ function imageRecord(
 function airbnbAmenityDecision(extraction: {
   provider?: string;
   airbnb_laundry_amenity_label?: string;
-}): "IN_UNIT" | "SHARED_BUILDING" | null {
+  metadata_laundry_signals?: Array<{ classification?: string; strength?: string; source?: string }>;
+}): { decision: "IN_UNIT" | "SHARED_BUILDING"; source: "airbnb_amenity" | "airbnb_metadata" } | null {
   if (extraction.provider !== "airbnb") return null;
-  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_UNIT") return "IN_UNIT";
-  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_BUILDING") return "SHARED_BUILDING";
+  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_UNIT") return { decision: "IN_UNIT", source: "airbnb_amenity" };
+  if (extraction.airbnb_laundry_amenity_label === "WASHER_IN_BUILDING") return { decision: "SHARED_BUILDING", source: "airbnb_amenity" };
+  const strongSignal = extraction.metadata_laundry_signals?.find((signal) => signal.strength === "strong");
+  const source = strongSignal?.source === "airbnb_amenity" ? "airbnb_amenity" : "airbnb_metadata";
+  if (strongSignal?.classification === "IN_UNIT") return { decision: "IN_UNIT", source };
+  if (strongSignal?.classification === "SHARED_BUILDING") return { decision: "SHARED_BUILDING", source };
   return null;
 }
 
@@ -229,13 +234,14 @@ async function classifyListing(args: Args): Promise<unknown[]> {
       phase: "amenity_short_circuit",
       listingUrl: args.listingUrl,
       provider: extraction.provider,
-      decision: amenityDecision,
+      decision: amenityDecision.decision,
+      decisionSource: amenityDecision.source,
       durationMs: 0,
     });
     records.push(listingSummaryRecord(args, extraction, {
-      decision: amenityDecision,
+      decision: amenityDecision.decision,
       confidence: "high",
-      decisionSource: "airbnb_amenity",
+      decisionSource: amenityDecision.source,
       escalatedImageIndexes: [],
       evidence: [],
     }));

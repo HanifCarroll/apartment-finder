@@ -57,3 +57,28 @@ export function classifyAirbnbLaundryAmenitySignal(
     text: cleaned,
   };
 }
+
+export function classifyAirbnbDescriptionLaundrySignal(
+  text: string,
+): LaundryMetadataSignal | null {
+  const cleaned = cleanMetadataText(text);
+  const lower = cleaned.toLowerCase();
+  if (!/\b(laundry|washer|washing machine)\b/.test(lower)) return null;
+  if (/\blaundromat nearby\b/.test(lower)) return null;
+
+  if (
+    /\b(?:laundry|washer|washing machine)\s+(?:available\s+)?(?:in|inside|on)\s+(?:the\s+)?building\b/.test(lower) ||
+    /\bbuilding\s+(?:laundry|washer|washing machine)\b/.test(lower) ||
+    /\bshared\s+(?:laundry|washer|washing machine)\b/.test(lower) ||
+    /\blaundry\s+room\s+(?:in|inside|on)\s+(?:the\s+)?building\b/.test(lower)
+  ) {
+    return {
+      source: "airbnb_description",
+      classification: "SHARED_BUILDING",
+      strength: "strong",
+      text: cleaned.match(/[^.?!]*(?:laundry|washer|washing machine)[^.?!]*/i)?.[0]?.trim() || cleaned,
+    };
+  }
+
+  return null;
+}
