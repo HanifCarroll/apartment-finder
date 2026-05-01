@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_ESCALATION_MODEL, DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES, DEFAULT_MODEL, DEFAULT_MODEL_CACHE, DEFAULT_MODEL_CALL_TIMEOUT_MS } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY, DEFAULT_LISTING_CONCURRENCY } from "../src/lib/concurrency";
 import { mapConcurrent } from "../src/lib/concurrency";
 import OpenAI from "openai";
@@ -37,6 +37,7 @@ type RunArgs = {
   escalationModel: string;
   maxImages: number;
   maxEscalationImages: number;
+  modelCallTimeoutMs: number;
   concurrency: number;
   listingConcurrency: number;
   modelCachePath: string;
@@ -91,6 +92,7 @@ function parseArgs(argv: string[]): RunArgs {
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     maxImages: DEFAULT_MAX_IMAGES,
     maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
+    modelCallTimeoutMs: DEFAULT_MODEL_CALL_TIMEOUT_MS,
     concurrency: DEFAULT_CONCURRENCY,
     listingConcurrency: DEFAULT_LISTING_CONCURRENCY,
     modelCachePath: DEFAULT_MODEL_CACHE,
@@ -792,6 +794,7 @@ async function main() {
       detail: "auto",
       maxImages: args.maxImages,
       maxEscalationImages: args.maxEscalationImages,
+      modelCallTimeoutMs: args.modelCallTimeoutMs,
       concurrency: args.concurrency,
       listingSummary: true,
       escalationModel: args.escalationModel,

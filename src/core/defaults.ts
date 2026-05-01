@@ -10,6 +10,7 @@ export const DEFAULT_EXTRACTION_CACHE = `${DEFAULT_CACHE_DIR}/extractions.jsonl`
 export const DEFAULT_MODEL_CACHE = `${DEFAULT_CACHE_DIR}/model-results.jsonl`;
 export const DEFAULT_MAX_IMAGES = 60;
 export const DEFAULT_STAGED_CLASSIFICATION = true;
+export const DEFAULT_MODEL_CALL_TIMEOUT_MS = 45_000;
 
 export function defaultListingScanOptions(
   overrides: Partial<ListingScanOptions> = {},
@@ -19,6 +20,7 @@ export function defaultListingScanOptions(
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
     maxImages: DEFAULT_MAX_IMAGES,
     maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
+    modelCallTimeoutMs: Number.parseInt(process.env.OPENAI_MODEL_CALL_TIMEOUT_MS || "", 10) || DEFAULT_MODEL_CALL_TIMEOUT_MS,
     concurrency: DEFAULT_CONCURRENCY,
     cacheDir: DEFAULT_CACHE_DIR,
     modelCachePath: DEFAULT_MODEL_CACHE,

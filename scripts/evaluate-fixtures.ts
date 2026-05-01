@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { DEFAULT_CACHE_DIR, DEFAULT_MODEL, DEFAULT_MODEL_CACHE } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_MODEL, DEFAULT_MODEL_CACHE, DEFAULT_MODEL_CALL_TIMEOUT_MS } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY, mapConcurrent } from "../src/lib/concurrency";
 import { loadImageFromUrl } from "../src/lib/images";
 import { classifyWithModel, modelRunOptionsFromArgs } from "../src/openai-classifier";
@@ -23,6 +23,7 @@ type EvalArgs = {
   outPath: string;
   summaryPath: string;
   concurrency: number;
+  modelCallTimeoutMs: number;
   modelCachePath: string;
   useModelCache: boolean;
   refreshModelCache: boolean;
@@ -97,6 +98,7 @@ function parseArgs(argv: string[]): EvalArgs {
     outPath: "results/eval-fixtures.jsonl",
     summaryPath: "results/eval-fixtures-summary.json",
     concurrency: DEFAULT_CONCURRENCY,
+    modelCallTimeoutMs: DEFAULT_MODEL_CALL_TIMEOUT_MS,
     modelCachePath: DEFAULT_MODEL_CACHE,
     useModelCache: true,
     refreshModelCache: false,

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES, DEFAULT_MODEL_CACHE } from "../src/cli/args";
+import { DEFAULT_CACHE_DIR, DEFAULT_EXTRACTION_CACHE, DEFAULT_MAX_IMAGES, DEFAULT_MODEL_CACHE, DEFAULT_MODEL_CALL_TIMEOUT_MS } from "../src/cli/args";
 import { DEFAULT_CONCURRENCY } from "../src/lib/concurrency";
 import { appendJsonl } from "../src/lib/jsonl";
 import { runClassification } from "../src/classifier-runner";
@@ -125,6 +125,7 @@ async function main() {
       detail: "auto",
       maxImages: args.maxImages,
       maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
+      modelCallTimeoutMs: DEFAULT_MODEL_CALL_TIMEOUT_MS,
       concurrency: args.concurrency,
       listingSummary: false,
       escalationModel: "gpt-5.4",

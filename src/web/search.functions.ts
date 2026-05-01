@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   DEFAULT_ESCALATION_MODEL,
   DEFAULT_MAX_IMAGES,
+  DEFAULT_MODEL_CALL_TIMEOUT_MS,
   DEFAULT_MODEL,
 } from "@/cli/args";
 import { DEFAULT_MAX_ESCALATION_IMAGES } from "@/listing/escalation";
@@ -29,6 +30,7 @@ const SearchRequestSchema = z.object({
   maxPages: z.coerce.number().int().positive().max(10).default(3),
   maxImages: z.coerce.number().int().positive().max(120).default(DEFAULT_MAX_IMAGES),
   maxEscalationImages: z.coerce.number().int().nonnegative().max(120).default(DEFAULT_MAX_ESCALATION_IMAGES),
+  modelCallTimeoutMs: z.coerce.number().int().positive().max(300_000).default(DEFAULT_MODEL_CALL_TIMEOUT_MS),
   model: z.string().trim().default(DEFAULT_MODEL),
   escalationModel: z.string().trim().default(DEFAULT_ESCALATION_MODEL),
 });
@@ -221,6 +223,7 @@ async function prepareSearchScan(data: SearchRequest) {
       escalationModel: data.escalationModel,
       maxImages: data.maxImages,
       maxEscalationImages: data.maxEscalationImages,
+      modelCallTimeoutMs: data.modelCallTimeoutMs,
       maxListings: data.maxListings,
       maxPages: data.maxPages,
       includeAll: true,

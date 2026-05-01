@@ -15,6 +15,7 @@ export type ListingScanOptions = {
   escalationModel: string;
   maxImages: number;
   maxEscalationImages: number;
+  modelCallTimeoutMs: number;
   concurrency: number;
   cacheDir: string;
   modelCachePath: string;
@@ -48,6 +49,7 @@ export function toListingSummaryArgs(listingUrl: string, options: ListingScanOpt
     detail: "auto",
     maxImages: options.maxImages,
     maxEscalationImages: options.maxEscalationImages,
+    modelCallTimeoutMs: options.modelCallTimeoutMs,
     concurrency: options.concurrency,
     listingSummary: true,
     escalationModel: options.escalationModel,

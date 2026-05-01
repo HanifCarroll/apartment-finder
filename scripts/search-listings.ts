@@ -5,6 +5,7 @@ import {
   DEFAULT_ESCALATION_MODEL,
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
+  DEFAULT_MODEL_CALL_TIMEOUT_MS,
   DEFAULT_MODEL,
   DEFAULT_MODEL_CACHE,
 } from "../src/cli/args";
@@ -66,6 +67,7 @@ function parseArgs(argv: string[]): SearchArgs {
     .option("--escalation-model <id>", `Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.`)
     .option("--max-images <n>", `Maximum photos per listing. Defaults to ${DEFAULT_MAX_IMAGES}.`)
     .option("--max-escalation-images <n>", `Maximum photos to escalate per listing. Defaults to ${DEFAULT_MAX_ESCALATION_IMAGES}.`)
+    .option("--model-call-timeout-ms <n>", `Maximum time for one model call before recording an image error. Defaults to ${DEFAULT_MODEL_CALL_TIMEOUT_MS}.`)
     .option("--concurrency <n>", `Concurrent model calls inside each listing. Defaults to ${DEFAULT_CONCURRENCY}.`)
     .option("--cache-dir <path>", `Image cache directory. Defaults to ${DEFAULT_CACHE_DIR}.`)
     .option("--model-cache <path>", `Model result cache path. Defaults to ${DEFAULT_MODEL_CACHE}.`)
@@ -103,6 +105,7 @@ function parseArgs(argv: string[]): SearchArgs {
     escalationModel?: string;
     maxImages?: string;
     maxEscalationImages?: string;
+    modelCallTimeoutMs?: string;
     concurrency?: string;
     cacheDir?: string;
     modelCache?: string;
@@ -144,6 +147,9 @@ function parseArgs(argv: string[]): SearchArgs {
     maxEscalationImages: options.maxEscalationImages
       ? parseNonNegativeInt(options.maxEscalationImages, "--max-escalation-images")
       : defaults.maxEscalationImages,
+    modelCallTimeoutMs: options.modelCallTimeoutMs
+      ? parsePositiveInt(options.modelCallTimeoutMs, "--model-call-timeout-ms")
+      : defaults.modelCallTimeoutMs,
     concurrency: options.concurrency ? parsePositiveInt(options.concurrency, "--concurrency") : defaults.concurrency,
     cacheDir: options.cacheDir || defaults.cacheDir,
     modelCachePath: options.modelCache || defaults.modelCachePath,

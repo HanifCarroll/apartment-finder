@@ -54,6 +54,7 @@ export type Args = {
   detail: "low" | "high" | "auto";
   maxImages: number;
   maxEscalationImages: number;
+  modelCallTimeoutMs: number;
   concurrency: number;
   listingSummary: boolean;
   escalationModel: string;

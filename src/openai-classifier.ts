@@ -17,18 +17,20 @@ export type ModelRunOptions = {
   useModelCache?: boolean;
   refreshModelCache?: boolean;
   shadowVerdictV2?: boolean;
+  timeoutMs?: number;
   promptContextKey?: string;
   promptContext?: string;
 };
 
 export function modelRunOptionsFromArgs(args: Pick<Args,
   "modelCachePath" | "useModelCache" | "refreshModelCache" | "shadowVerdictV2"
->): ModelRunOptions {
+> & { modelCallTimeoutMs?: number }): ModelRunOptions {
   return {
     modelCachePath: args.modelCachePath,
     useModelCache: args.useModelCache,
     refreshModelCache: args.refreshModelCache,
     shadowVerdictV2: args.shadowVerdictV2,
+    timeoutMs: args.modelCallTimeoutMs,
   };
 }
 
@@ -116,6 +118,11 @@ export async function classifyWithModel(
     usage?: { total_tokens?: number } | null;
   } | undefined;
   let response: Response | undefined;
+  const timeoutMs = options.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : undefined;
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeout = timeoutMs
+    ? setTimeout(() => controller?.abort(`Model call exceeded ${timeoutMs}ms timeout.`), timeoutMs)
+    : undefined;
   try {
     const result = await withGlobalModelCallSlot(() =>
       client.responses.parse({
@@ -136,7 +143,7 @@ export async function classifyWithModel(
         text: {
           format: zodTextFormat(VerdictSchema, "washing_machine_location_verdict"),
         },
-      }).withResponse(),
+      }, controller ? { signal: controller.signal } : undefined).withResponse(),
     );
     data = result.data;
     response = result.response;
@@ -151,6 +158,8 @@ export async function classifyWithModel(
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 
   const latency_ms = Math.round(performance.now() - startedAt);

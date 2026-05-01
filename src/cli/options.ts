@@ -49,6 +49,15 @@ export function parseCommonScanOption(
       target.maxEscalationImages = maxEscalationImages;
       return index + 1;
     }
+    case "--model-call-timeout-ms": {
+      if (!next) throw new Error("--model-call-timeout-ms requires a value.");
+      const modelCallTimeoutMs = Number.parseInt(next, 10);
+      if (!Number.isInteger(modelCallTimeoutMs) || modelCallTimeoutMs < 1) {
+        throw new Error("--model-call-timeout-ms must be a positive integer.");
+      }
+      target.modelCallTimeoutMs = modelCallTimeoutMs;
+      return index + 1;
+    }
     case "--concurrency": {
       if (!next) throw new Error("--concurrency requires a value.");
       const concurrency = Number.parseInt(next, 10);

@@ -6,6 +6,7 @@ export {
   DEFAULT_ESCALATION_MODEL,
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
+  DEFAULT_MODEL_CALL_TIMEOUT_MS,
   DEFAULT_MODEL,
   DEFAULT_MODEL_CACHE,
 } from "../core/defaults";
@@ -14,6 +15,7 @@ import {
   DEFAULT_ESCALATION_MODEL,
   DEFAULT_EXTRACTION_CACHE,
   DEFAULT_MAX_IMAGES,
+  DEFAULT_MODEL_CALL_TIMEOUT_MS,
   DEFAULT_MODEL,
   DEFAULT_MODEL_CACHE,
 } from "../core/defaults";
@@ -42,6 +44,7 @@ Options:
   --detail <level>    Image detail: low, high, or auto. Defaults to auto.
   --max-images <n>    Maximum listing photos to extract. Defaults to ${DEFAULT_MAX_IMAGES}.
   --max-escalation-images <n> Maximum photos to escalate per listing summary. Defaults to ${DEFAULT_MAX_ESCALATION_IMAGES}.
+  --model-call-timeout-ms <n> Maximum time for one model call before recording an image error. Defaults to ${DEFAULT_MODEL_CALL_TIMEOUT_MS}.
   --concurrency <n>   Concurrent model calls for listing classification. Defaults to ${DEFAULT_CONCURRENCY}.
   --listing-summary   Return a listing-level decision using mini first, then ${DEFAULT_ESCALATION_MODEL} for uncertain photos.
   --escalation-model <model> Model for second-pass listing summary checks. Defaults to ${DEFAULT_ESCALATION_MODEL}.
@@ -67,6 +70,7 @@ export function parseArgs(argv: string[]): Args {
     detail: "auto",
     maxImages: DEFAULT_MAX_IMAGES,
     maxEscalationImages: DEFAULT_MAX_ESCALATION_IMAGES,
+    modelCallTimeoutMs: Number.parseInt(process.env.OPENAI_MODEL_CALL_TIMEOUT_MS || "", 10) || DEFAULT_MODEL_CALL_TIMEOUT_MS,
     concurrency: DEFAULT_CONCURRENCY,
     listingSummary: false,
     escalationModel: process.env.OPENAI_ESCALATION_MODEL || DEFAULT_ESCALATION_MODEL,
@@ -159,6 +163,14 @@ export function parseArgs(argv: string[]): Args {
         const maxEscalationImages = Number.parseInt(next, 10);
         if (!Number.isInteger(maxEscalationImages) || maxEscalationImages < 0) usage();
         args.maxEscalationImages = maxEscalationImages;
+        i += 1;
+        break;
+      }
+      case "--model-call-timeout-ms": {
+        if (!next) usage();
+        const modelCallTimeoutMs = Number.parseInt(next, 10);
+        if (!Number.isInteger(modelCallTimeoutMs) || modelCallTimeoutMs < 1) usage();
+        args.modelCallTimeoutMs = modelCallTimeoutMs;
         i += 1;
         break;
       }
