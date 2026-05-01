@@ -110,6 +110,14 @@ function collectDomImageUrls() {
   return Array.from(urls);
 }
 
+function collectHtmlImageUrls() {
+  const html = document.documentElement.outerHTML;
+  const urls = new Set();
+  const pattern = /https?:\\/\\/imgar\\.zonapropcdn\\.com\\/avisos\\/[^"\\s<>]+?\\.(?:jpe?g|webp|png)(?:\\?[^"\\s<>]*)?/gi;
+  for (const match of html.matchAll(pattern)) urls.add(match[0]);
+  return Array.from(urls);
+}
+
 async function clickGalleryButton() {
   const candidates = [
     state.page.getByRole('button', { name: /Ver todas las fotos/i }),
@@ -172,15 +180,23 @@ await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefine
 await state.page.waitForTimeout(1000);
 
 const galleryMeta = await state.page.evaluate(extractGalleryMeta);
-const clickedGallery = await clickGalleryButton();
+const embeddedImageUrls = uniqueZonapropImageUrls(await state.page.evaluate(collectHtmlImageUrls));
+const hasCompleteEmbeddedGallery = galleryMeta.gallery_count !== null
+  ? embeddedImageUrls.length >= Math.min(galleryMeta.gallery_count, maxImages)
+  : embeddedImageUrls.length >= maxImages;
+let clickedGallery = false;
+if (!hasCompleteEmbeddedGallery) {
+  clickedGallery = await clickGalleryButton();
+}
 if (clickedGallery) {
   await waitForPageLoad({ page: state.page, timeout: 8000 }).catch(() => undefined);
   await state.page.waitForTimeout(1500);
+  await scrollLazyContainers();
 }
-await scrollLazyContainers();
 await expandDescription();
 
 const imageUrls = uniqueZonapropImageUrls([
+  ...embeddedImageUrls,
   ...Array.from(state.zonapropImageUrls),
   ...await state.page.evaluate(collectDomImageUrls),
 ]);

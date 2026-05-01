@@ -55,7 +55,7 @@ Supported providers:
 
 - Zonaprop: browser extraction with Playwriter.
 - Argenprop: gallery endpoint extraction.
-- Airbnb: room page payload extraction, including washer amenity metadata when the page says `Washer`, `Washer - in unit`, or `Washer - in building`.
+- Airbnb: JSON API extraction through the web `StaysPdpSections` endpoint, including washer amenity metadata when the page says `Washer`, `Washer - in unit`, or `Washer - in building`.
 
 For normal use, prefer the two-pass listing summary:
 
@@ -148,6 +148,8 @@ Useful flags:
 ```
 
 If live extraction fails and a cached record exists, the CLI falls back to cached photo URLs and marks `extraction_source` as `cache_after_live_failure`.
+
+Airbnb extraction is adapter-backed. The default `api` adapter replays Airbnb's web JSON endpoint and falls back to the older HTML payload parser unless explicitly forced. Set `AIRBNB_EXTRACTION_ADAPTER=html` to force the HTML adapter, or `AIRBNB_EXTRACTION_ADAPTER=api` to require the JSON adapter without fallback.
 
 ## Model Result Cache
 

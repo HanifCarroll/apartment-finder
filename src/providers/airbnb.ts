@@ -2,6 +2,11 @@ import type { ListingExtraction } from "../types";
 import { classifyAirbnbLaundryAmenitySignal } from "../laundry-metadata";
 import { deriveListingDetails } from "../listing/details";
 
+const AIRBNB_API_KEY = "d306zoyjsyarp7ifhu67rjxn52tv0t20";
+const AIRBNB_STAYS_PDP_SECTIONS_HASH = "b9f31776706a7a799ed2ea0d1fff357808b574b832be21285377404ab59d3f77";
+
+type AirbnbExtractionAdapter = "api" | "html";
+
 function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")
@@ -9,6 +14,10 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&#x27;/g, "'")
     .replace(/&quot;/g, "\"")
     .replace(/\\u0026/g, "&");
+}
+
+function decodeAirbnbGlobalId(typeName: "StayListing" | "DemandStayListing", roomId: string): string {
+  return Buffer.from(`${typeName}:${roomId}`).toString("base64");
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -25,6 +34,153 @@ async function fetchText(url: string): Promise<string> {
   }
 
   return response.text();
+}
+
+async function fetchAirbnbJsonApi(listingUrl: string, roomId: string): Promise<unknown> {
+  const parsed = new URL(listingUrl);
+  const checkIn = parsed.searchParams.get("check_in") || parsed.searchParams.get("checkin");
+  const checkOut = parsed.searchParams.get("check_out") || parsed.searchParams.get("checkout");
+  const adults = parsed.searchParams.get("adults") || "1";
+  const children = parsed.searchParams.get("children") || "0";
+  const infants = parsed.searchParams.get("infants") || "0";
+  const pets = parsed.searchParams.get("pets") || "0";
+  const p3ImpressionId = parsed.searchParams.get("source_impression_id") || `p3_${Date.now()}_apartmentFinder`;
+  const amenityIds = parsed.searchParams.getAll("amenities[]")
+    .map((value) => Number(value))
+    .filter(Number.isFinite);
+
+  const variables = {
+    id: decodeAirbnbGlobalId("StayListing", roomId),
+    demandStayListingId: decodeAirbnbGlobalId("DemandStayListing", roomId),
+    pdpSectionsRequest: {
+      adults,
+      amenityFilters: amenityIds,
+      bypassTargetings: false,
+      categoryTag: null,
+      causeId: null,
+      children,
+      disasterId: null,
+      discountedGuestFeeVersion: null,
+      federatedSearchId: parsed.searchParams.get("federated_search_id"),
+      forceBoostPriorityMessageType: null,
+      hostPreview: false,
+      infants,
+      interactionType: null,
+      layouts: ["SIDEBAR", "SINGLE_COLUMN"],
+      pets: Number(pets),
+      pdpTypeOverride: null,
+      photoId: null,
+      preview: false,
+      previousStateCheckIn: null,
+      previousStateCheckOut: null,
+      priceDropSource: null,
+      privateBooking: false,
+      promotionUuid: null,
+      relaxedAmenityIds: null,
+      searchId: null,
+      selectedCancellationPolicyId: null,
+      selectedRatePlanId: null,
+      splitStays: null,
+      staysBookingMigrationEnabled: false,
+      translateUgc: null,
+      useNewSectionWrapperApi: false,
+      sectionIds: null,
+      checkIn,
+      checkOut,
+      p3ImpressionId,
+    },
+    categoryTag: null,
+    federatedSearchId: parsed.searchParams.get("federated_search_id"),
+    federatedSearchSessionId: null,
+    p3ImpressionId,
+    photoId: null,
+    amenityIds,
+    dateRange: checkIn && checkOut ? { startDate: checkIn, endDate: checkOut } : null,
+    guestCounts: {
+      numberOfAdults: Number(adults),
+      numberOfChildren: Number(children),
+      numberOfInfants: Number(infants),
+      numberOfPets: Number(pets),
+    },
+    numberOfChildren: Number(children),
+    numberOfInfants: Number(infants),
+    numberOfPets: Number(pets),
+    includePdpMigrationBookItNavFragment: false,
+    includeGpBookItFragment: true,
+    includePdpMigrationAmenitiesFragment: false,
+    includeGpAmenitiesFragment: true,
+    includePdpMigrationDescriptionFragment: false,
+    includeGpDescriptionFragment: true,
+    includePdpMigrationHeroFragment: false,
+    includeGpHeroFragment: true,
+    includePdpMigrationHighlightsFragment: false,
+    includeGpHighlightsFragment: true,
+    includePdpMigrationLocationPdpFragment: false,
+    includeGpLocationPdpFragment: true,
+    includePdpMigrationMeetYourHostFragment: false,
+    includeGpMeetYourHostFragment: true,
+    includePdpMigrationNavFragment: false,
+    includeGpNavFragment: true,
+    includePdpMigrationNavMobileFragment: false,
+    includeGpNavMobileFragment: true,
+    includePdpMigrationBookItFloatingFooterFragment: false,
+    includePdpMigrationBookItCalendarSheetFragment: false,
+    includePdpMigrationBookItNonExperiencedGuestFragment: false,
+    includeGpBookItNonExperiencedGuestFragment: true,
+    includePdpMigrationOverviewV2Fragment: false,
+    includeGpOverviewV2Fragment: true,
+    includePdpMigrationReviewsHighlightBannerFragment: false,
+    includeGpReviewsHighlightBannerFragment: true,
+    includeGpNonExperiencedGuestLearnMoreModalFragment: true,
+    includePdpMigrationReportToAirbnbFragment: false,
+    includeGpReportToAirbnbFragment: true,
+    includePdpMigrationReviewsFragment: false,
+    includeGpReviewsFragment: true,
+    includePdpMigrationReviewsEmptyFragment: false,
+    includeGpReviewsEmptyFragment: true,
+    includePdpMigrationTitleFragment: false,
+    includeGpTitleFragment: true,
+    includePdpMigrationPoliciesFragment: false,
+    includeGpPoliciesFragment: true,
+    includePdpMigrationMarqueeBookItFloatingFooterFragment: false,
+    includeGpMarqueeBookItFloatingFooterFragment: true,
+    includePdpMigrationMarqueeBookItNavFragment: false,
+    includeGpMarqueeBookItNavFragment: true,
+    includePdpMigrationMarqueeBookItSidebarFragment: false,
+    includeGpMarqueeBookItSidebarFragment: true,
+  };
+
+  const response = await fetch(
+    `https://www.airbnb.com/api/v3/StaysPdpSections/${AIRBNB_STAYS_PDP_SECTIONS_HASH}?operationName=StaysPdpSections&locale=en&currency=USD`,
+    {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "user-agent": "Mozilla/5.0 apartment-finder/0.1",
+        "x-airbnb-api-key": AIRBNB_API_KEY,
+        "x-airbnb-graphql-platform": "web",
+        "x-airbnb-graphql-platform-client": "minimalist-niobe",
+        "x-csrf-without-token": "1",
+      },
+      body: JSON.stringify({
+        operationName: "StaysPdpSections",
+        variables,
+        extensions: {
+          persistedQuery: {
+            version: 1,
+            sha256Hash: AIRBNB_STAYS_PDP_SECTIONS_HASH,
+          },
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Airbnb API fetch failed for ${listingUrl}: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
 function parseRoomId(listingUrl: string): string {
@@ -177,7 +333,158 @@ function parseAirbnbPrice(html: string): string | undefined {
   return match[0].startsWith("$") ? `USD ${match[1]}` : match[0];
 }
 
-export async function extractAirbnbListingImageUrls(
+function walkUnknown(value: unknown, visit: (value: Record<string, unknown>) => void): void {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) walkUnknown(item, visit);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  visit(record);
+  for (const child of Object.values(record)) walkUnknown(child, visit);
+}
+
+function extractApiSections(json: unknown): Array<Record<string, unknown>> {
+  const sections: Array<Record<string, unknown>> = [];
+  walkUnknown(json, (record) => {
+    if (typeof record.sectionComponentType === "string" && record.section && typeof record.section === "object") {
+      sections.push(record);
+    }
+  });
+  return sections;
+}
+
+function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseApiAmenities(sections: Array<Record<string, unknown>>): ListingExtraction["listing_amenities"] {
+  const amenitiesSection = sections.find((section) => section.sectionComponentType === "AMENITIES_DEFAULT")?.section;
+  const groups: ListingExtraction["listing_amenities"] = [];
+  if (!amenitiesSection || typeof amenitiesSection !== "object") return groups;
+
+  const seenGroups = new Set<string>();
+  const collectGroup = (group: Record<string, unknown>, fallbackTitle: string) => {
+    const title = stringField(group, "title") || fallbackTitle;
+    const amenities = Array.isArray(group.amenities) ? group.amenities : [];
+    const items = amenities
+      .filter((amenity): amenity is Record<string, unknown> => Boolean(amenity) && typeof amenity === "object")
+      .filter((amenity) => amenity.available !== false)
+      .map((amenity) => stringField(amenity, "title") || "")
+      .map(cleanText)
+      .filter(Boolean);
+    if (items.length === 0) return;
+    const key = `${title}:${items.join("|")}`;
+    if (seenGroups.has(key)) return;
+    seenGroups.add(key);
+    groups.push({ group: title, items: items.slice(0, 24) });
+  };
+
+  const section = amenitiesSection as Record<string, unknown>;
+  for (const key of ["previewAmenitiesGroups", "seeAllAmenitiesGroups"]) {
+    const rawGroups = Array.isArray(section[key]) ? section[key] : [];
+    for (const rawGroup of rawGroups) {
+      if (rawGroup && typeof rawGroup === "object") collectGroup(rawGroup as Record<string, unknown>, "Amenities");
+    }
+  }
+
+  return groups;
+}
+
+function parseApiLaundryAmenity(amenityGroups: ListingExtraction["listing_amenities"]): Pick<
+  ListingExtraction,
+  "airbnb_laundry_amenity_label" | "airbnb_laundry_amenity_text"
+> {
+  const washerTitles = new Set<string>();
+  for (const group of amenityGroups || []) {
+    for (const item of group.items) {
+      if (/washer/i.test(item)) washerTitles.add(item);
+    }
+  }
+
+  const text = Array.from(washerTitles).join("; ");
+  const lower = text.toLowerCase();
+  if (!text) return { airbnb_laundry_amenity_label: "NONE", airbnb_laundry_amenity_text: "" };
+  if (lower.includes("in building")) {
+    return { airbnb_laundry_amenity_label: "WASHER_IN_BUILDING", airbnb_laundry_amenity_text: text };
+  }
+  if (lower.includes("in unit")) {
+    return { airbnb_laundry_amenity_label: "WASHER_IN_UNIT", airbnb_laundry_amenity_text: text };
+  }
+  return { airbnb_laundry_amenity_label: "WASHER", airbnb_laundry_amenity_text: text };
+}
+
+function textFromHtml(html: string | undefined): string {
+  return cleanText(
+    decodeHtmlEntities(html || "")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<[^>]+>/g, " "),
+  );
+}
+
+async function extractAirbnbListingWithApi(
+  listingUrl: string,
+  maxImages: number,
+): Promise<ListingExtraction> {
+  const roomId = parseRoomId(listingUrl);
+  const json = await fetchAirbnbJsonApi(listingUrl, roomId);
+  const sections = extractApiSections(json);
+  const photoTourSection = sections.find((section) => section.sectionComponentType === "PHOTO_TOUR_SCROLLABLE")?.section as
+    | Record<string, unknown>
+    | undefined;
+  const mediaItems = Array.isArray(photoTourSection?.mediaItems) ? photoTourSection.mediaItems : [];
+  const rawImageUrls = mediaItems
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => stringField(item, "baseUrl") || "")
+    .filter(Boolean);
+  const imageUrls = uniqueAirbnbImageUrls(rawImageUrls, roomId, maxImages);
+  if (imageUrls.length === 0) throw new Error("Airbnb API returned no listing photos.");
+
+  const titleSection = sections.find((section) => section.sectionComponentType === "TITLE_DEFAULT")?.section as
+    | Record<string, unknown>
+    | undefined;
+  const descriptionSection = sections.find((section) => section.sectionComponentType === "DESCRIPTION_DEFAULT")?.section as
+    | Record<string, unknown>
+    | undefined;
+  const htmlDescription = descriptionSection?.htmlDescription && typeof descriptionSection.htmlDescription === "object"
+    ? descriptionSection.htmlDescription as Record<string, unknown>
+    : undefined;
+  const shareSave = titleSection?.shareSave && typeof titleSection.shareSave === "object"
+    ? titleSection.shareSave as Record<string, unknown>
+    : undefined;
+  const sharingConfig = shareSave?.sharingConfig && typeof shareSave.sharingConfig === "object"
+    ? shareSave.sharingConfig as Record<string, unknown>
+    : undefined;
+  const amenityGroups = parseApiAmenities(sections);
+  const laundryAmenity = parseApiLaundryAmenity(amenityGroups);
+  const airbnbSignal = laundryAmenity.airbnb_laundry_amenity_text
+    ? classifyAirbnbLaundryAmenitySignal(laundryAmenity.airbnb_laundry_amenity_text)
+    : null;
+
+  const baseExtraction = {
+    provider: "airbnb",
+    listing_title: stringField(sharingConfig, "title") || stringField(titleSection, "title"),
+    listing_description: textFromHtml(stringField(htmlDescription, "htmlText")) || stringField(titleSection, "title"),
+    listing_amenities: amenityGroups,
+    ...laundryAmenity,
+    metadata_laundry_signals: airbnbSignal ? [airbnbSignal] : [],
+    listing_url: listingUrl,
+    page_url: new URL(`/rooms/${roomId}`, "https://www.airbnb.com").href,
+    image_urls: imageUrls,
+    clicked_gallery: false,
+    gallery_count: mediaItems.length || null,
+    gallery_count_matches_extracted: mediaItems.length === 0 ? null : mediaItems.length === imageUrls.length,
+    gallery_text: mediaItems.length ? `${mediaItems.length} photos` : "",
+  } satisfies ListingExtraction;
+
+  return {
+    ...baseExtraction,
+    ...deriveListingDetails(baseExtraction),
+  };
+}
+
+async function extractAirbnbListingWithHtml(
   listingUrl: string,
   maxImages: number,
 ): Promise<ListingExtraction> {
@@ -211,4 +518,20 @@ export async function extractAirbnbListingImageUrls(
     ...baseExtraction,
     ...deriveListingDetails(baseExtraction),
   };
+}
+
+export async function extractAirbnbListingImageUrls(
+  listingUrl: string,
+  maxImages: number,
+): Promise<ListingExtraction> {
+  const adapter = (process.env.AIRBNB_EXTRACTION_ADAPTER || "api").toLowerCase() as AirbnbExtractionAdapter;
+  if (adapter === "html") {
+    return extractAirbnbListingWithHtml(listingUrl, maxImages);
+  }
+  try {
+    return await extractAirbnbListingWithApi(listingUrl, maxImages);
+  } catch (error) {
+    if (process.env.AIRBNB_EXTRACTION_ADAPTER === "api") throw error;
+    return extractAirbnbListingWithHtml(listingUrl, maxImages);
+  }
 }
