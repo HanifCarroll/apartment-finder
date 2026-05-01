@@ -331,25 +331,24 @@ for (const ignored of args.builtSearchIgnored) {
 
 if (args.discoverOnly) {
   printDiscovery(result.search, args);
-  process.exit(0);
-}
+} else {
+  if (args.format === "table") {
+    console.log(listingScanHeader());
+  }
 
-if (args.format === "table") {
-  console.log(listingScanHeader());
-}
-
-let printedIndex = 0;
-for (const item of result.items) {
-  if (!item.printed) continue;
-  printedIndex += 1;
-  const summary = item.result?.summary || item.failure;
-  const extraction = item.result?.extraction;
-  if (!summary) continue;
-  if (args.format === "cards") {
-    console.log(formatCard(printedIndex, summary, extraction));
-    console.log("");
-  } else {
-    console.log(formatListingScanResult(summary, extraction, args.jsonOutput));
+  let printedIndex = 0;
+  for (const item of result.items) {
+    if (!item.printed) continue;
+    printedIndex += 1;
+    const summary = item.result?.summary || item.failure;
+    const extraction = item.result?.extraction;
+    if (!summary) continue;
+    if (args.format === "cards") {
+      console.log(formatCard(printedIndex, summary, extraction));
+      console.log("");
+    } else {
+      console.log(formatListingScanResult(summary, extraction, args.jsonOutput));
+    }
   }
 }
 

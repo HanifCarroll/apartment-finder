@@ -14,6 +14,132 @@ const provider = ${JSON.stringify(provider)};
 const maxListings = ${JSON.stringify(maxListings)};
 const maxPages = ${JSON.stringify(maxPages)};
 
+function normalizeListingUrl(rawUrl, baseUrl) {
+  try {
+    const parsed = new URL(rawUrl, baseUrl);
+    parsed.hash = '';
+    if (provider === 'airbnb') {
+      const roomId = parsed.pathname.match(/\\/rooms\\/(\\d+)/)?.[1];
+      if (!roomId) return null;
+      return new URL('/rooms/' + roomId, 'https://www.airbnb.com').href;
+    }
+    if (provider === 'zonaprop') {
+      if (!/\\/propiedades\\/clasificado\\//.test(parsed.pathname)) return null;
+      parsed.search = '';
+      return parsed.href;
+    }
+    if (provider === 'argenprop') {
+      if (!/--\\d+$/.test(parsed.pathname)) return null;
+      parsed.search = '';
+      return parsed.href;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function listingHrefPattern() {
+  if (provider === 'airbnb') return /\\/rooms\\/\\d+/;
+  if (provider === 'zonaprop') return /\\/propiedades\\/clasificado\\//;
+  if (provider === 'argenprop') return /--\\d+(?:[/?#]|$)/;
+  return /$a/;
+}
+
+async function discoverZonapropFromHtml() {
+  state.page = context.pages().find((p) => p.url() === 'about:blank') ?? await context.newPage();
+  if (!state.page.url().startsWith('https://www.zonaprop.com.ar/')) {
+    await state.page.goto('https://www.zonaprop.com.ar/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await waitForPageLoad({ page: state.page, timeout: 12000 }).catch(() => undefined);
+  }
+
+  const result = await state.page.evaluate(async ({ searchUrl, maxListings, maxPages }) => {
+    function normalizeZonapropListingUrl(rawUrl, baseUrl) {
+      try {
+        const parsed = new URL(rawUrl, baseUrl);
+        parsed.hash = '';
+        if (!/\\/propiedades\\/clasificado\\//.test(parsed.pathname)) return null;
+        parsed.search = '';
+        return parsed.href;
+      } catch {
+        return null;
+      }
+    }
+
+    function collectListingUrlsFromDocument(doc, baseUrl) {
+      const urls = new Set();
+      for (const anchor of doc.querySelectorAll('a[href]')) {
+        const href = anchor.getAttribute('href') || '';
+        if (!/\\/propiedades\\/clasificado\\//.test(href)) continue;
+        const normalized = normalizeZonapropListingUrl(href, baseUrl);
+        if (normalized) urls.add(normalized);
+      }
+      return Array.from(urls);
+    }
+
+    function findNextPageUrlFromDocument(doc, baseUrl, nextPageNumber) {
+      function usableHref(anchor) {
+        const href = anchor.getAttribute('href');
+        if (!href || href === '#' || href.startsWith('javascript:')) return null;
+        try { return new URL(href, baseUrl).href; } catch { return null; }
+      }
+
+      const anchors = Array.from(doc.querySelectorAll('a[href]'));
+      const arrow = anchors.find((anchor) => (anchor.getAttribute('class') || '').includes('paging-module__page-arrow'));
+      if (arrow) return usableHref(arrow);
+      const numbered = anchors.find((anchor) => {
+        const text = (anchor.textContent || '').trim();
+        return text === String(nextPageNumber) && /pagina-\\d+\\.html/i.test(anchor.getAttribute('href') || '');
+      });
+      if (numbered) return usableHref(numbered);
+      if (/\\.html(?:[?#].*)?$/.test(baseUrl)) return baseUrl.replace(/\\.html([?#].*)?$/, '-pagina-' + nextPageNumber + '.html');
+      return null;
+    }
+
+    const listingUrls = [];
+    const seenListingUrls = new Set();
+    const pageUrls = [];
+    const seenPageUrls = new Set();
+    let pageUrl = searchUrl;
+
+    for (let pageIndex = 0; pageIndex < maxPages && listingUrls.length < maxListings && pageUrl; pageIndex += 1) {
+      const response = await fetch(pageUrl, {
+        credentials: 'include',
+        headers: { accept: 'text/html,application/xhtml+xml' },
+      });
+      const html = await response.text();
+      if (!response.ok) throw new Error('Zonaprop search HTML fetch failed with HTTP ' + response.status);
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const responseUrl = response.url || pageUrl;
+      if (!seenPageUrls.has(responseUrl)) {
+        seenPageUrls.add(responseUrl);
+        pageUrls.push(responseUrl);
+      }
+
+      for (const url of collectListingUrlsFromDocument(doc, responseUrl)) {
+        if (seenListingUrls.has(url)) continue;
+        seenListingUrls.add(url);
+        listingUrls.push(url);
+        if (listingUrls.length >= maxListings) break;
+      }
+
+      if (listingUrls.length >= maxListings) break;
+      pageUrl = findNextPageUrlFromDocument(doc, responseUrl, pageIndex + 2);
+      if (pageUrl && seenPageUrls.has(pageUrl)) break;
+    }
+
+    return {
+      search_url: searchUrl,
+      page_url: pageUrls.at(-1) || searchUrl,
+      page_urls: pageUrls,
+      listing_urls: listingUrls,
+    };
+  }, { searchUrl, maxListings, maxPages });
+
+  if (result.listing_urls.length > 0) return result;
+  throw new Error('Zonaprop search HTML discovery returned no listing URLs.');
+}
+
 async function scrollResults() {
   let previousHeight = 0;
   for (let i = 0; i < 10; i += 1) {
@@ -143,6 +269,14 @@ async function clickNextPage(nextPageNumber) {
   }
 
   return false;
+}
+
+if (provider === 'zonaprop') {
+  const payload = await discoverZonapropFromHtml();
+  console.log(${JSON.stringify(startMarker)});
+  console.log(JSON.stringify(payload));
+  console.log(${JSON.stringify(endMarker)});
+  return;
 }
 
 state.page = context.pages().find((p) => p.url() === 'about:blank') ?? await context.newPage();
