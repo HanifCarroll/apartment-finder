@@ -35,6 +35,15 @@ describe("neighborhood registry", () => {
 
     expect(result.url).toContain("alquiler-temporal-paternal-con-amoblado");
   });
+
+  it("uses provider-specific Argenprop location slugs for naming exceptions", () => {
+    expect(buildSearchUrl({ provider: "argenprop", neighborhoods: ["la-boca"] }).url)
+      .toContain("/boca?con-amoblado");
+    expect(buildSearchUrl({ provider: "argenprop", neighborhoods: ["nueva-pompeya"] }).url)
+      .toContain("/pompeya?con-amoblado");
+    expect(buildSearchUrl({ provider: "argenprop", neighborhoods: ["villa-santa-rita"] }).url)
+      .toContain("/br-santa-rita?con-amoblado");
+  });
 });
 
 describe("buildSearchUrl", () => {
