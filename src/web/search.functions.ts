@@ -9,7 +9,8 @@ import {
 import { DEFAULT_MAX_ESCALATION_IMAGES } from "@/listing/escalation";
 import { deriveListingDetails } from "@/listing/details";
 import { appendListingFeedback } from "@/feedback";
-import { defaultSearchScanOptions } from "@/core";
+import { defaultSearchScanOptions, isInUnitWasherMatch } from "@/core";
+import { formatInUnitReason } from "@/listing/output";
 
 const SearchRequestSchema = z.object({
   mode: z.enum(["url", "filters"]),
@@ -52,6 +53,8 @@ export type SearchUiItem = {
   printed: boolean;
   decision?: string;
   confidence?: string;
+  inUnitMatch: boolean;
+  rejectionReason?: string;
   source?: string;
   amenity?: string;
   title?: string;
@@ -261,7 +264,7 @@ async function runSearchJob(jobId: string, data: SearchRequest): Promise<void> {
           listingCount: job.totalListings,
           warnings: job.result?.warnings || warnings,
           ignored,
-          matchCount: partialItems.filter((partial) => partial?.decision === "IN_UNIT").length,
+          matchCount: partialItems.filter((partial) => partial?.inUnitMatch).length,
           failedCount: partialItems.filter((partial) => partial?.failed).length,
           items: completedItems,
         };
@@ -335,6 +338,8 @@ function toUiItem(item: Awaited<ReturnType<typeof import("@/core").scanSearchUrl
     printed: item.printed,
     decision: summary?.decision,
     confidence: summary?.confidence,
+    inUnitMatch: isInUnitWasherMatch(summary),
+    rejectionReason: summary ? formatInUnitReason(summary) : undefined,
     source: summary?.decision_source,
     amenity: summary?.airbnb_laundry_amenity_text || extraction?.airbnb_laundry_amenity_text,
     title: extraction?.listing_title,

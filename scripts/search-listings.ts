@@ -61,7 +61,7 @@ function parseArgs(argv: string[]): SearchArgs {
     .option("--out <path>", "Append full JSONL audit records.")
     .option("--max-listings <n>", "Maximum listing URLs to inspect.", "20")
     .option("--max-pages <n>", "Maximum search result pages to visit.", "5")
-    .option("--all", "Print every classified listing, not just IN_UNIT matches.")
+    .option("--all", "Print every classified listing, not just in-unit washer matches.")
     .option("--discover-only", "Only extract listing URLs; no model calls.")
     .option("--model <model>", `First-pass model. Defaults to ${DEFAULT_MODEL}.`)
     .option("--escalation-model <id>", `Second-pass model. Defaults to ${DEFAULT_ESCALATION_MODEL}.`)
@@ -358,4 +358,4 @@ if (args.discoverOnly) {
   }
 }
 
-console.error(`Done: ${result.matchCount} IN_UNIT match(es), ${result.failedCount} failed, ${result.search.listing_urls.length} scanned.`);
+console.error(`Done: ${result.matchCount} in-unit washer match(es), ${result.failedCount} failed, ${result.search.listing_urls.length} scanned.`);

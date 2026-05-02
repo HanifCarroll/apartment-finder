@@ -33,6 +33,27 @@ export type ListingSummaryRecord = {
   error?: string;
 };
 
+export function isInUnitWasherMatch(summary: ListingSummaryRecord | undefined): boolean {
+  return summary?.decision === "IN_UNIT";
+}
+
+export function formatInUnitDecision(summary: ListingSummaryRecord): string {
+  if (!summary.ok) return "ERROR";
+  if (summary.decision === "IN_UNIT") return "IN_UNIT_MATCH";
+  if (summary.decision === "SHARED_BUILDING") return "NOT_IN_UNIT_MATCH";
+  if (summary.decision === "CONFLICTING") return "NEEDS_REVIEW";
+  return "NOT_IN_UNIT_MATCH";
+}
+
+export function formatInUnitReason(summary: ListingSummaryRecord): string {
+  if (!summary.ok) return summary.error || "scan_failed";
+  if (summary.decision === "IN_UNIT") return "in_unit_evidence";
+  if (summary.decision === "SHARED_BUILDING") return "shared_building_only";
+  if (summary.decision === "CONFLICTING") return "conflicting_evidence";
+  if (summary.decision_source === "vision_incomplete") return "insufficient_evidence";
+  return "no_in_unit_evidence";
+}
+
 export type ListingExtractionRecord = {
   ok?: boolean;
   type?: string;
@@ -131,7 +152,9 @@ export function formatListingSummaryText(
   const bestUrl = bestEvidenceUrl(summary);
 
   return [
-    `${summary.decision || "UNKNOWN"} ${summary.confidence || "unknown"}`,
+    `${formatInUnitDecision(summary)} ${summary.confidence || "unknown"}`,
+    `reason: ${formatInUnitReason(summary)}`,
+    summary.decision ? `internal_label: ${summary.decision}` : undefined,
     formatDecisionSource(summary),
     `evidence: ${formatPhotoRefs(summary)}`,
     `gallery:${provider} ${gallery} photos${source}`,
@@ -155,8 +178,9 @@ export function formatListingScanLine(
   const amenity = formatAmenity(summary, extraction);
 
   return [
-    summary.decision || "UNKNOWN",
+    formatInUnitDecision(summary),
     summary.confidence || "unknown",
+    formatInUnitReason(summary),
     summary.decision_source || "vision",
     amenity,
     gallery,

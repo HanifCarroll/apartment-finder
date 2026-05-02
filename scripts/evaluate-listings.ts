@@ -50,7 +50,7 @@ type Args = {
 const DEFAULT_POLICIES = [
   "any-in-unit",
   "high-confidence-in-unit",
-  "shared-overrides-in-unit",
+  "in-unit-wins",
   "two-model-agreement",
 ];
 

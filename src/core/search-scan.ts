@@ -5,6 +5,7 @@ import { findListingUrlsFromSearchUrl, type ListingSearchResult } from "../listi
 import type { LocationLabel } from "../types";
 import {
   appendFailedListingScan,
+  isInUnitWasherMatch,
   scanListing,
   type ListingScanOptions,
   type ListingScanResult,
@@ -88,7 +89,7 @@ export async function scanSearchUrl(
 
     try {
       const result = await scanListing(listingUrl, options, options.outPath);
-      const printed = shouldPrint(result.summary.decision, options.includeAll);
+      const printed = shouldPrint(result.summary, options.includeAll);
       const item: SearchScanItem = { listingUrl, printed, failed: false, result };
       logger.info({
         event: "listing_scan_finished",
@@ -121,7 +122,7 @@ export async function scanSearchUrl(
     }
   });
 
-  const matchCount = items.filter((item) => item.printed && item.result?.summary.decision === "IN_UNIT").length;
+  const matchCount = items.filter((item) => item.printed && isInUnitWasherMatch(item.result?.summary)).length;
   const printedCount = items.filter((item) => item.printed).length;
   const failedCount = items.filter((item) => item.failed).length;
 
@@ -144,6 +145,6 @@ export async function scanSearchUrl(
   };
 }
 
-function shouldPrint(decision: LocationLabel | undefined, includeAll: boolean): boolean {
-  return includeAll || decision === "IN_UNIT";
+function shouldPrint(summary: { decision?: LocationLabel } | undefined, includeAll: boolean): boolean {
+  return includeAll || summary?.decision === "IN_UNIT";
 }

@@ -27,7 +27,7 @@ export type ListingAggregate = {
   evidence: ListingEvidence[];
 };
 
-export const DEFAULT_LISTING_POLICY = "shared-overrides-in-unit";
+export const DEFAULT_LISTING_POLICY = "in-unit-wins";
 
 const labelOrder: Record<LocationLabel, number> = {
   IN_UNIT: 0,
@@ -115,6 +115,13 @@ export function aggregateByPolicy(
   if (policy === "shared-overrides-in-unit") {
     if (strongShared.length > 0) return { predictedLocation: "SHARED_BUILDING", evidence };
     if (strongInUnit.length > 0) return { predictedLocation: "IN_UNIT", evidence };
+    if (strongConflicting.length > 0) return { predictedLocation: "CONFLICTING", evidence };
+    return { predictedLocation: "UNKNOWN", evidence };
+  }
+
+  if (policy === "in-unit-wins") {
+    if (strongInUnit.length > 0) return { predictedLocation: "IN_UNIT", evidence };
+    if (strongShared.length > 0) return { predictedLocation: "SHARED_BUILDING", evidence };
     if (strongConflicting.length > 0) return { predictedLocation: "CONFLICTING", evidence };
     return { predictedLocation: "UNKNOWN", evidence };
   }

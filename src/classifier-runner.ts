@@ -482,7 +482,7 @@ async function classifyListing(args: Args): Promise<unknown[]> {
         const decision = candidateSummary.summary.decision;
         const confidence = candidateSummary.summary.confidence;
 
-        if (!textGuidedFullGallery && (decision === "IN_UNIT" || decision === "SHARED_BUILDING") && confidence === "high") {
+        if (!textGuidedFullGallery && decision === "IN_UNIT" && confidence === "high") {
           const finalSummary = await buildSummary(firstPassRecords, classifiedIndexes, { performEscalation: true });
           records.push(...finalSummary.escalationRecords);
           records.push(finalSummary.summary);

@@ -60,9 +60,18 @@ describe("isStrongEvidence", () => {
 });
 
 describe("aggregateByPolicy", () => {
-  it("lets strong shared-building evidence override strong in-unit evidence", () => {
-    const aggregate = aggregateByPolicy("shared-overrides-in-unit", [
+  it("lets strong in-unit evidence win even when shared-building evidence exists", () => {
+    const aggregate = aggregateByPolicy("in-unit-wins", [
       record("IN_UNIT", 0.98),
+      record("SHARED_BUILDING", 0.9, "partial"),
+    ]);
+
+    expect(aggregate.predictedLocation).toBe("IN_UNIT");
+    expect(listingConfidence(aggregate)).toBe("high");
+  });
+
+  it("keeps shared-building as a negative reason when no in-unit evidence exists", () => {
+    const aggregate = aggregateByPolicy("in-unit-wins", [
       record("SHARED_BUILDING", 0.9, "partial"),
     ]);
 
@@ -71,7 +80,7 @@ describe("aggregateByPolicy", () => {
   });
 
   it("returns unknown when there is no washer evidence", () => {
-    const aggregate = aggregateByPolicy("shared-overrides-in-unit", [
+    const aggregate = aggregateByPolicy("in-unit-wins", [
       record("UNKNOWN", 0.8, "none"),
     ]);
 
@@ -81,7 +90,7 @@ describe("aggregateByPolicy", () => {
 
   it("lets an escalation verdict replace first-pass washer evidence for the same image", () => {
     const source = "https://example.com/kitchen-wall-boiler.jpg";
-    const aggregate = aggregateByPolicy("shared-overrides-in-unit", [
+    const aggregate = aggregateByPolicy("in-unit-wins", [
       record("IN_UNIT", 0.96, "clear", { imageIndex: 8, source }),
       record("UNKNOWN", 0.95, "none", { pass: "escalation", imageIndex: 8, source }),
     ]);

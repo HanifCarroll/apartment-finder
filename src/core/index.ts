@@ -21,6 +21,7 @@ export {
 export {
   appendFailedListingScan,
   formatListingScanResult,
+  isInUnitWasherMatch,
   listingScanHeader,
   scanListing,
   toListingSummaryArgs,

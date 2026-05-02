@@ -43,7 +43,7 @@ const COMMON_NEIGHBORHOOD_KEYS = [
   "caballito",
 ];
 
-type ResultFilter = "ALL" | "IN_UNIT" | "SHARED_BUILDING" | "UNKNOWN";
+type ResultFilter = "ALL" | "MATCH" | "NO_MATCH" | "REVIEW";
 type ResultSort = "SCAN_ORDER" | "PRICE_ASC" | "PRICE_DESC";
 
 type FormState = {
@@ -84,7 +84,7 @@ const LOADING_STAGES = [
   "Preparing the search",
   "Finding result pages",
   "Extracting listing photos and descriptions",
-  "Classifying washer evidence",
+  "Checking for in-unit washers",
   "Ranking and filtering results",
 ];
 
@@ -465,7 +465,7 @@ function ResultsPanel({
       <StateCard
         icon={<Building2 className="h-5 w-5" />}
         title="Ready"
-        text="Build a search from filters or paste a search URL, then scan listings for washer evidence."
+        text="Build a search from filters or paste a search URL, then scan for apartments with an in-unit washer."
       />
     );
   }
@@ -509,7 +509,7 @@ function ResultsPanel({
           ))
         ) : (
           <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
-            No listings match this filter.
+            No listings match this view.
           </div>
         )}
       </div>
@@ -552,9 +552,9 @@ function ResultFilterTabs({
   const counts = React.useMemo(() => countResultFilters(result.items), [result.items]);
   const options: Array<{ value: ResultFilter; label: string; count: number }> = [
     { value: "ALL", label: "All", count: result.items.length },
-    { value: "IN_UNIT", label: "In-unit", count: counts.IN_UNIT },
-    { value: "SHARED_BUILDING", label: "Shared", count: counts.SHARED_BUILDING },
-    { value: "UNKNOWN", label: "Unknown", count: counts.UNKNOWN },
+    { value: "MATCH", label: "Matches", count: counts.MATCH },
+    { value: "NO_MATCH", label: "No match", count: counts.NO_MATCH },
+    { value: "REVIEW", label: "Review", count: counts.REVIEW },
   ];
 
   return (
@@ -582,7 +582,7 @@ function ResultSummary({ result }: { result: SearchUiResult }) {
       <SummaryPill label="Provider" value={result.provider} />
       <SummaryPill label="Listings" value={String(result.listingCount)} />
       <SummaryPill label="Pages" value={String(result.pageUrls.length)} />
-      <SummaryPill label="In-unit" value={String(result.matchCount)} />
+      <SummaryPill label="Matches" value={String(result.matchCount)} />
     </div>
   );
 }
@@ -610,6 +610,7 @@ function ListingResult({
   const [expanded, setExpanded] = React.useState(false);
   const listing = describeListingUrl(item.listingUrl, item.title);
   const decision = item.failed ? "FAILED" : item.decision || "UNKNOWN";
+  const reason = item.rejectionReason ? formatRejectionReason(item.rejectionReason) : "";
 
   return (
     <Card
@@ -632,10 +633,11 @@ function ListingResult({
             {formatRooms(item) ? <span>{formatRooms(item)}</span> : null}
             <span>{item.imageCount ?? item.imageUrls.length}/{item.galleryCount ?? "?"} photos</span>
             {item.source ? <span>{item.source}</span> : null}
+            {!item.inUnitMatch && reason ? <span>{reason}</span> : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={item.decision === "IN_UNIT" ? "default" : item.failed ? "destructive" : "outline"}>
+          <Badge variant={item.inUnitMatch ? "default" : item.failed ? "destructive" : "outline"}>
             {formatDecision(decision)}
           </Badge>
           {item.confidence ? <Badge variant="secondary">{formatConfidence(item.confidence)}</Badge> : null}
@@ -767,9 +769,9 @@ function ListingResult({
 
 function matchesResultFilter(item: SearchUiResult["items"][number], filter: ResultFilter): boolean {
   if (filter === "ALL") return true;
-  const decision = item.failed ? "UNKNOWN" : item.decision || "UNKNOWN";
-  if (filter === "UNKNOWN") return decision !== "IN_UNIT" && decision !== "SHARED_BUILDING";
-  return decision === filter;
+  if (filter === "MATCH") return item.inUnitMatch;
+  if (filter === "REVIEW") return item.failed || item.decision === "CONFLICTING";
+  return !item.inUnitMatch && !item.failed && item.decision !== "CONFLICTING";
 }
 
 function formatRooms(item: SearchUiResult["items"][number]): string {
@@ -798,11 +800,19 @@ function sortResultItems(items: SearchUiResult["items"], sort: ResultSort): Sear
 }
 
 function formatDecision(decision: string): string {
-  if (decision === "IN_UNIT") return "Washer in unit";
-  if (decision === "SHARED_BUILDING") return "Shared laundry";
+  if (decision === "IN_UNIT") return "In-unit washer";
+  if (decision === "SHARED_BUILDING") return "No in-unit washer";
   if (decision === "CONFLICTING") return "Needs review";
   if (decision === "FAILED") return "Scan failed";
-  return "No washer found";
+  return "No in-unit evidence";
+}
+
+function formatRejectionReason(reason: string): string {
+  if (reason === "shared_building_only") return "shared laundry only";
+  if (reason === "no_in_unit_evidence") return "no in-unit evidence";
+  if (reason === "insufficient_evidence") return "insufficient evidence";
+  if (reason === "conflicting_evidence") return "conflicting evidence";
+  return reason.replace(/_/g, " ");
 }
 
 function formatConfidence(confidence: string): string {
@@ -822,14 +832,14 @@ function formatArea(item: SearchUiResult["items"][number]): string {
 function countResultFilters(items: SearchUiResult["items"]): Record<ResultFilter, number> {
   const counts: Record<ResultFilter, number> = {
     ALL: items.length,
-    IN_UNIT: 0,
-    SHARED_BUILDING: 0,
-    UNKNOWN: 0,
+    MATCH: 0,
+    NO_MATCH: 0,
+    REVIEW: 0,
   };
   for (const item of items) {
-    if (item.decision === "IN_UNIT") counts.IN_UNIT += 1;
-    else if (item.decision === "SHARED_BUILDING") counts.SHARED_BUILDING += 1;
-    else counts.UNKNOWN += 1;
+    if (item.inUnitMatch) counts.MATCH += 1;
+    else if (item.failed || item.decision === "CONFLICTING") counts.REVIEW += 1;
+    else counts.NO_MATCH += 1;
   }
   return counts;
 }
@@ -1243,7 +1253,7 @@ function updateForm(
 }
 
 function isResultFilter(value: string | null): value is ResultFilter {
-  return value === "ALL" || value === "IN_UNIT" || value === "SHARED_BUILDING" || value === "UNKNOWN";
+  return value === "ALL" || value === "MATCH" || value === "NO_MATCH" || value === "REVIEW";
 }
 
 function readStoredResultFilter(fallback: ResultFilter = "ALL"): ResultFilter {

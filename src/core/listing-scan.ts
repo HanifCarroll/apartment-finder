@@ -4,6 +4,7 @@ import {
   findListingExtractionRecord,
   findListingSummaryRecord,
   formatListingScanLine,
+  isInUnitWasherMatch,
   type ListingExtractionRecord,
   type ListingSummaryRecord,
 } from "../listing/output";
@@ -95,7 +96,7 @@ export async function appendFailedListingScan(
 }
 
 export function listingScanHeader(): string {
-  return ["decision", "confidence", "source", "amenity", "gallery", "evidence", "best_url", "listing_url"].join("\t");
+  return ["in_unit_match", "confidence", "reason", "source", "amenity", "gallery", "evidence", "best_url", "listing_url"].join("\t");
 }
 
 export function formatListingScanResult(
@@ -107,3 +108,5 @@ export function formatListingScanResult(
     ? JSON.stringify({ ...summary, extraction })
     : formatListingScanLine(summary, extraction);
 }
+
+export { isInUnitWasherMatch };
