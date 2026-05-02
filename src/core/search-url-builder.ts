@@ -5,15 +5,40 @@ export type SearchFilters = {
   neighborhoods: string[];
   minPriceUsd?: number;
   maxPriceUsd?: number;
+  minSurfaceM2?: number;
+  maxSurfaceM2?: number;
+  surfaceType?: "covered" | "total";
+  minBathrooms?: number;
+  minParking?: number;
   ambientes?: number;
   minAmbientes?: number;
   maxAmbientes?: number;
   dormitorios?: number;
   minDormitorios?: number;
   maxDormitorios?: number;
+  furnished?: boolean;
+  propertySubtypes?: string[];
+  advertiserType?: "all" | "agency" | "owner";
+  publicationDate?: "yesterday" | "today" | "last-week";
+  age?: "under-construction" | "new" | "up-to-5-years";
+  roomTypes?: string[];
+  comforts?: string[];
+  propertyFeatures?: string[];
+  disposition?: string[];
+  services?: string[];
+  media?: string[];
+  argenpropGeneralServices?: string[];
   checkIn?: string;
   checkOut?: string;
   adults?: number;
+  children?: number;
+  infants?: number;
+  pets?: number;
+  airbnbRoomTypes?: string[];
+  airbnbAmenityIds?: string[];
+  minBedrooms?: number;
+  minBeds?: number;
+  minAirbnbBathrooms?: number;
 };
 
 export type BuiltSearchUrl = {
@@ -32,142 +57,101 @@ type Neighborhood = {
   group: "North corridor" | "Central" | "West" | "South" | "Other CABA";
 };
 
+export type FilterOption = {
+  value: string;
+  label: string;
+};
+
+export const ZONAPROP_FILTER_OPTIONS = {
+  propertySubtypes: [
+    { value: "estandar", label: "Estándar" },
+    { value: "monoambiente", label: "Monoambiente" },
+    { value: "semipiso", label: "Semipiso" },
+    { value: "piso", label: "Piso" },
+  ],
+  roomTypes: [
+    { value: "cocina", label: "Cocina" },
+    { value: "living-comedor", label: "Living comedor" },
+    { value: "balcon", label: "Balcón" },
+    { value: "lavadero", label: "Lavadero" },
+  ],
+  comforts: [
+    { value: "pileta", label: "Pileta" },
+    { value: "parrilla", label: "Parrilla" },
+    { value: "encargado", label: "Encargado" },
+    { value: "vigilancia", label: "Vigilancia" },
+  ],
+  propertyFeatures: [
+    { value: "apto-profesional", label: "Apto profesional" },
+    { value: "acceso-para-personas-con-movilidad-reducida", label: "Accesibilidad" },
+    { value: "cocina-equipada", label: "Cocina equipada" },
+  ],
+  disposition: [
+    { value: "contrafrente", label: "Contrafrente" },
+    { value: "frente", label: "Frente" },
+    { value: "interior", label: "Interior" },
+  ],
+  services: [
+    { value: "luz", label: "Luz" },
+    { value: "agua-corriente", label: "Agua corriente" },
+    { value: "gas-natural", label: "Gas natural" },
+    { value: "calefaccion", label: "Calefacción" },
+  ],
+  media: [
+    { value: "recorrido-360", label: "Recorrido 360" },
+    { value: "video", label: "Video" },
+    { value: "planos", label: "Planos" },
+  ],
+} satisfies Record<string, FilterOption[]>;
+
+export const ARGENPROP_FILTER_OPTIONS = {
+  generalServices: [
+    { value: "amoblado", label: "Amoblado" },
+    { value: "electricidad", label: "Electricidad" },
+    { value: "calefaccion", label: "Calefacción" },
+    { value: "aire-acondicionado-individual", label: "Aire acondicionado individual" },
+    { value: "ascensores-principales", label: "Ascensores principales" },
+    { value: "pileta", label: "Pileta" },
+    { value: "solarium", label: "Solarium" },
+    { value: "parrilla", label: "Parrilla" },
+    { value: "apto-profesional", label: "Apto profesional" },
+    { value: "termotanque", label: "Termotanque" },
+    { value: "permite-mascotas", label: "Permite mascotas" },
+    { value: "agua-corriente", label: "Agua corriente" },
+    { value: "ascensor", label: "Ascensor" },
+    { value: "gas-natural", label: "Gas natural" },
+    { value: "cable", label: "Cable" },
+    { value: "ascensores-de-servicio", label: "Ascensores de servicio" },
+  ],
+} satisfies Record<string, FilterOption[]>;
+
+export const AIRBNB_FILTER_OPTIONS = {
+  roomTypes: [
+    { value: "Entire home/apt", label: "Entire home" },
+    { value: "Private room", label: "Room" },
+    { value: "Shared room", label: "Shared room" },
+  ],
+  amenities: [
+    { value: "4", label: "Wifi" },
+    { value: "8", label: "Kitchen" },
+    { value: "5", label: "Air conditioning" },
+    { value: "33", label: "Washer" },
+    { value: "34", label: "Dryer" },
+    { value: "9", label: "Free parking" },
+    { value: "46", label: "Iron" },
+    { value: "7", label: "Pool" },
+    { value: "15", label: "Gym" },
+  ],
+} satisfies Record<string, FilterOption[]>;
+
 const NEIGHBORHOODS: Record<string, Neighborhood> = {
-  nunez: {
-    key: "nunez",
-    label: "Nuñez",
-    zonaprop: "nunez",
-    argenprop: "nunez",
-    airbnb: "Nuñez",
-    group: "North corridor",
-  },
-  "las-canitas": {
-    key: "las-canitas",
-    label: "Las Cañitas",
-    zonaprop: "las-canitas",
-    argenprop: "las-canitas",
-    airbnb: "Las Cañitas",
-    group: "North corridor",
-  },
-  belgrano: {
-    key: "belgrano",
-    label: "Belgrano",
-    zonaprop: "belgrano",
-    argenprop: "belgrano",
-    airbnb: "Belgrano",
-    group: "North corridor",
-  },
-  palermo: {
-    key: "palermo",
-    label: "Palermo",
-    zonaprop: "palermo",
-    argenprop: "palermo",
-    airbnb: "Palermo",
-    group: "North corridor",
-  },
-  colegiales: {
-    key: "colegiales",
-    label: "Colegiales",
-    zonaprop: "colegiales",
-    argenprop: "colegiales",
-    airbnb: "Colegiales",
-    group: "North corridor",
-  },
-  chacarita: {
-    key: "chacarita",
-    label: "Chacarita",
-    zonaprop: "chacarita",
-    argenprop: "chacarita",
-    airbnb: "Chacarita",
-    group: "North corridor",
-  },
-  "villa-urquiza": {
-    key: "villa-urquiza",
-    label: "Villa Urquiza",
-    zonaprop: "villa-urquiza",
-    argenprop: "villa-urquiza",
-    airbnb: "Villa Urquiza",
-    group: "North corridor",
-  },
-  "villa-ortuzar": {
-    key: "villa-ortuzar",
-    label: "Villa Ortúzar",
-    zonaprop: "villa-ortuzar",
-    argenprop: "villa-ortuzar",
-    airbnb: "Villa Ortúzar",
-    group: "North corridor",
-  },
-  "villa-crespo": {
-    key: "villa-crespo",
-    label: "Villa Crespo",
-    zonaprop: "villa-crespo",
-    argenprop: "villa-crespo",
-    airbnb: "Villa Crespo",
-    group: "North corridor",
-  },
-  "barrio-norte": {
-    key: "barrio-norte",
-    label: "Barrio Norte",
-    zonaprop: "barrio-norte",
-    argenprop: "barrio-norte",
-    airbnb: "Barrio Norte",
-    group: "Central",
-  },
-  caballito: {
-    key: "caballito",
-    label: "Caballito",
-    zonaprop: "caballito",
-    argenprop: "caballito",
-    airbnb: "Caballito",
+  agronomia: {
+    key: "agronomia",
+    label: "Agronomía",
+    zonaprop: "agronomia",
+    argenprop: "agronomia",
+    airbnb: "Agronomía",
     group: "West",
-  },
-  recoleta: {
-    key: "recoleta",
-    label: "Recoleta",
-    zonaprop: "recoleta",
-    argenprop: "recoleta",
-    airbnb: "Recoleta",
-    group: "Central",
-  },
-  "puerto-madero": {
-    key: "puerto-madero",
-    label: "Puerto Madero",
-    zonaprop: "puerto-madero",
-    argenprop: "puerto-madero",
-    airbnb: "Puerto Madero",
-    group: "Central",
-  },
-  "san-telmo": {
-    key: "san-telmo",
-    label: "San Telmo",
-    zonaprop: "san-telmo",
-    argenprop: "san-telmo",
-    airbnb: "San Telmo",
-    group: "Central",
-  },
-  retiro: {
-    key: "retiro",
-    label: "Retiro",
-    zonaprop: "retiro",
-    argenprop: "retiro",
-    airbnb: "Retiro",
-    group: "Central",
-  },
-  monserrat: {
-    key: "monserrat",
-    label: "Monserrat",
-    zonaprop: "monserrat",
-    argenprop: "monserrat",
-    airbnb: "Monserrat",
-    group: "Central",
-  },
-  "san-nicolas": {
-    key: "san-nicolas",
-    label: "San Nicolás",
-    zonaprop: "san-nicolas",
-    argenprop: "san-nicolas",
-    airbnb: "San Nicolás",
-    group: "Central",
   },
   almagro: {
     key: "almagro",
@@ -185,22 +169,6 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     airbnb: "Balvanera",
     group: "Central",
   },
-  boedo: {
-    key: "boedo",
-    label: "Boedo",
-    zonaprop: "boedo",
-    argenprop: "boedo",
-    airbnb: "Boedo",
-    group: "Central",
-  },
-  "parque-patricios": {
-    key: "parque-patricios",
-    label: "Parque Patricios",
-    zonaprop: "parque-patricios",
-    argenprop: "parque-patricios",
-    airbnb: "Parque Patricios",
-    group: "South",
-  },
   barracas: {
     key: "barracas",
     label: "Barracas",
@@ -209,13 +177,61 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     airbnb: "Barracas",
     group: "South",
   },
-  "la-boca": {
-    key: "la-boca",
-    label: "La Boca",
-    zonaprop: "la-boca",
-    argenprop: "la-boca",
-    airbnb: "La Boca",
-    group: "South",
+  "barrio-norte": {
+    key: "barrio-norte",
+    label: "Barrio Norte",
+    zonaprop: "barrio-norte",
+    argenprop: "barrio-norte",
+    airbnb: "Barrio Norte",
+    group: "Central",
+  },
+  belgrano: {
+    key: "belgrano",
+    label: "Belgrano",
+    zonaprop: "belgrano",
+    argenprop: "belgrano",
+    airbnb: "Belgrano",
+    group: "North corridor",
+  },
+  boedo: {
+    key: "boedo",
+    label: "Boedo",
+    zonaprop: "boedo",
+    argenprop: "boedo",
+    airbnb: "Boedo",
+    group: "Central",
+  },
+  caballito: {
+    key: "caballito",
+    label: "Caballito",
+    zonaprop: "caballito",
+    argenprop: "caballito",
+    airbnb: "Caballito",
+    group: "West",
+  },
+  chacarita: {
+    key: "chacarita",
+    label: "Chacarita",
+    zonaprop: "chacarita",
+    argenprop: "chacarita",
+    airbnb: "Chacarita",
+    group: "North corridor",
+  },
+  coghlan: {
+    key: "coghlan",
+    label: "Coghlan",
+    zonaprop: "coghlan",
+    argenprop: "coghlan",
+    airbnb: "Coghlan",
+    group: "North corridor",
+  },
+  colegiales: {
+    key: "colegiales",
+    label: "Colegiales",
+    zonaprop: "colegiales",
+    argenprop: "colegiales",
+    airbnb: "Colegiales",
+    group: "North corridor",
   },
   constitucion: {
     key: "constitucion",
@@ -241,6 +257,206 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     airbnb: "Floresta",
     group: "West",
   },
+  "la-boca": {
+    key: "la-boca",
+    label: "La Boca",
+    zonaprop: "la-boca",
+    argenprop: "la-boca",
+    airbnb: "La Boca",
+    group: "South",
+  },
+  "la-paternal": {
+    key: "la-paternal",
+    label: "La Paternal",
+    zonaprop: "paternal",
+    argenprop: "paternal",
+    airbnb: "La Paternal",
+    group: "West",
+  },
+  "las-canitas": {
+    key: "las-canitas",
+    label: "Las Cañitas",
+    zonaprop: "las-canitas",
+    argenprop: "las-canitas",
+    airbnb: "Las Cañitas",
+    group: "North corridor",
+  },
+  liniers: {
+    key: "liniers",
+    label: "Liniers",
+    zonaprop: "liniers",
+    argenprop: "liniers",
+    airbnb: "Liniers",
+    group: "West",
+  },
+  mataderos: {
+    key: "mataderos",
+    label: "Mataderos",
+    zonaprop: "mataderos",
+    argenprop: "mataderos",
+    airbnb: "Mataderos",
+    group: "West",
+  },
+  monserrat: {
+    key: "monserrat",
+    label: "Monserrat",
+    zonaprop: "monserrat",
+    argenprop: "monserrat",
+    airbnb: "Monserrat",
+    group: "Central",
+  },
+  "monte-castro": {
+    key: "monte-castro",
+    label: "Monte Castro",
+    zonaprop: "monte-castro",
+    argenprop: "monte-castro",
+    airbnb: "Monte Castro",
+    group: "West",
+  },
+  "nueva-pompeya": {
+    key: "nueva-pompeya",
+    label: "Nueva Pompeya",
+    zonaprop: "nueva-pompeya",
+    argenprop: "nueva-pompeya",
+    airbnb: "Nueva Pompeya",
+    group: "South",
+  },
+  nunez: {
+    key: "nunez",
+    label: "Nuñez",
+    zonaprop: "nunez",
+    argenprop: "nunez",
+    airbnb: "Nuñez",
+    group: "North corridor",
+  },
+  palermo: {
+    key: "palermo",
+    label: "Palermo",
+    zonaprop: "palermo",
+    argenprop: "palermo",
+    airbnb: "Palermo",
+    group: "North corridor",
+  },
+  "parque-avellaneda": {
+    key: "parque-avellaneda",
+    label: "Parque Avellaneda",
+    zonaprop: "parque-avellaneda",
+    argenprop: "parque-avellaneda",
+    airbnb: "Parque Avellaneda",
+    group: "West",
+  },
+  "parque-centenario": {
+    key: "parque-centenario",
+    label: "Parque Centenario",
+    zonaprop: "parque-centenario",
+    argenprop: "parque-centenario",
+    airbnb: "Parque Centenario",
+    group: "Other CABA",
+  },
+  "parque-chacabuco": {
+    key: "parque-chacabuco",
+    label: "Parque Chacabuco",
+    zonaprop: "parque-chacabuco",
+    argenprop: "parque-chacabuco",
+    airbnb: "Parque Chacabuco",
+    group: "West",
+  },
+  "parque-chas": {
+    key: "parque-chas",
+    label: "Parque Chas",
+    zonaprop: "parque-chas",
+    argenprop: "parque-chas",
+    airbnb: "Parque Chas",
+    group: "North corridor",
+  },
+  "parque-patricios": {
+    key: "parque-patricios",
+    label: "Parque Patricios",
+    zonaprop: "parque-patricios",
+    argenprop: "parque-patricios",
+    airbnb: "Parque Patricios",
+    group: "South",
+  },
+  "puerto-madero": {
+    key: "puerto-madero",
+    label: "Puerto Madero",
+    zonaprop: "puerto-madero",
+    argenprop: "puerto-madero",
+    airbnb: "Puerto Madero",
+    group: "Central",
+  },
+  recoleta: {
+    key: "recoleta",
+    label: "Recoleta",
+    zonaprop: "recoleta",
+    argenprop: "recoleta",
+    airbnb: "Recoleta",
+    group: "Central",
+  },
+  retiro: {
+    key: "retiro",
+    label: "Retiro",
+    zonaprop: "retiro",
+    argenprop: "retiro",
+    airbnb: "Retiro",
+    group: "Central",
+  },
+  saavedra: {
+    key: "saavedra",
+    label: "Saavedra",
+    zonaprop: "saavedra",
+    argenprop: "saavedra",
+    airbnb: "Saavedra",
+    group: "North corridor",
+  },
+  "san-cristobal": {
+    key: "san-cristobal",
+    label: "San Cristóbal",
+    zonaprop: "san-cristobal",
+    argenprop: "san-cristobal",
+    airbnb: "San Cristóbal",
+    group: "Central",
+  },
+  "san-nicolas": {
+    key: "san-nicolas",
+    label: "San Nicolás",
+    zonaprop: "san-nicolas",
+    argenprop: "san-nicolas",
+    airbnb: "San Nicolás",
+    group: "Central",
+  },
+  "san-telmo": {
+    key: "san-telmo",
+    label: "San Telmo",
+    zonaprop: "san-telmo",
+    argenprop: "san-telmo",
+    airbnb: "San Telmo",
+    group: "Central",
+  },
+  versalles: {
+    key: "versalles",
+    label: "Versalles",
+    zonaprop: "versalles",
+    argenprop: "versalles",
+    airbnb: "Versalles",
+    group: "West",
+  },
+  "velez-sarsfield": {
+    key: "velez-sarsfield",
+    label: "Vélez Sarsfield",
+    zonaprop: "velez-sarsfield",
+    argenprop: "velez-sarsfield",
+    airbnb: "Vélez Sarsfield",
+    group: "West",
+  },
+  "villa-crespo": {
+    key: "villa-crespo",
+    label: "Villa Crespo",
+    zonaprop: "villa-crespo",
+    argenprop: "villa-crespo",
+    airbnb: "Villa Crespo",
+    group: "North corridor",
+  },
   "villa-del-parque": {
     key: "villa-del-parque",
     label: "Villa del Parque",
@@ -257,54 +473,6 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     airbnb: "Villa Devoto",
     group: "West",
   },
-  "villa-pueyrredon": {
-    key: "villa-pueyrredon",
-    label: "Villa Pueyrredón",
-    zonaprop: "villa-pueyrredon",
-    argenprop: "villa-pueyrredon",
-    airbnb: "Villa Pueyrredón",
-    group: "West",
-  },
-  paternal: {
-    key: "paternal",
-    label: "Paternal",
-    zonaprop: "paternal",
-    argenprop: "paternal",
-    airbnb: "Paternal",
-    group: "West",
-  },
-  agronomia: {
-    key: "agronomia",
-    label: "Agronomía",
-    zonaprop: "agronomia",
-    argenprop: "agronomia",
-    airbnb: "Agronomía",
-    group: "West",
-  },
-  "parque-chacabuco": {
-    key: "parque-chacabuco",
-    label: "Parque Chacabuco",
-    zonaprop: "parque-chacabuco",
-    argenprop: "parque-chacabuco",
-    airbnb: "Parque Chacabuco",
-    group: "West",
-  },
-  "villa-luro": {
-    key: "villa-luro",
-    label: "Villa Luro",
-    zonaprop: "villa-luro",
-    argenprop: "villa-luro",
-    airbnb: "Villa Luro",
-    group: "West",
-  },
-  "villa-santa-rita": {
-    key: "villa-santa-rita",
-    label: "Villa Santa Rita",
-    zonaprop: "villa-santa-rita",
-    argenprop: "villa-santa-rita",
-    airbnb: "Villa Santa Rita",
-    group: "West",
-  },
   "villa-general-mitre": {
     key: "villa-general-mitre",
     label: "Villa General Mitre",
@@ -312,22 +480,6 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     argenprop: "villa-general-mitre",
     airbnb: "Villa General Mitre",
     group: "West",
-  },
-  "parque-centenario": {
-    key: "parque-centenario",
-    label: "Parque Centenario",
-    zonaprop: "parque-centenario",
-    argenprop: "parque-centenario",
-    airbnb: "Parque Centenario",
-    group: "Other CABA",
-  },
-  "villa-real": {
-    key: "villa-real",
-    label: "Villa Real",
-    zonaprop: "villa-real",
-    argenprop: "villa-real",
-    airbnb: "Villa Real",
-    group: "Other CABA",
   },
   "villa-lugano": {
     key: "villa-lugano",
@@ -337,21 +489,37 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     airbnb: "Villa Lugano",
     group: "South",
   },
-  "villa-soldati": {
-    key: "villa-soldati",
-    label: "Villa Soldati",
-    zonaprop: "villa-soldati",
-    argenprop: "villa-soldati",
-    airbnb: "Villa Soldati",
-    group: "South",
+  "villa-luro": {
+    key: "villa-luro",
+    label: "Villa Luro",
+    zonaprop: "villa-luro",
+    argenprop: "villa-luro",
+    airbnb: "Villa Luro",
+    group: "West",
   },
-  "nueva-pompeya": {
-    key: "nueva-pompeya",
-    label: "Nueva Pompeya",
-    zonaprop: "nueva-pompeya",
-    argenprop: "nueva-pompeya",
-    airbnb: "Nueva Pompeya",
-    group: "South",
+  "villa-ortuzar": {
+    key: "villa-ortuzar",
+    label: "Villa Ortúzar",
+    zonaprop: "villa-ortuzar",
+    argenprop: "villa-ortuzar",
+    airbnb: "Villa Ortúzar",
+    group: "North corridor",
+  },
+  "villa-pueyrredon": {
+    key: "villa-pueyrredon",
+    label: "Villa Pueyrredón",
+    zonaprop: "villa-pueyrredon",
+    argenprop: "villa-pueyrredon",
+    airbnb: "Villa Pueyrredón",
+    group: "West",
+  },
+  "villa-real": {
+    key: "villa-real",
+    label: "Villa Real",
+    zonaprop: "villa-real",
+    argenprop: "villa-real",
+    airbnb: "Villa Real",
+    group: "Other CABA",
   },
   "villa-riachuelo": {
     key: "villa-riachuelo",
@@ -361,6 +529,34 @@ const NEIGHBORHOODS: Record<string, Neighborhood> = {
     airbnb: "Villa Riachuelo",
     group: "South",
   },
+  "villa-santa-rita": {
+    key: "villa-santa-rita",
+    label: "Villa Santa Rita",
+    zonaprop: "villa-santa-rita",
+    argenprop: "villa-santa-rita",
+    airbnb: "Villa Santa Rita",
+    group: "West",
+  },
+  "villa-soldati": {
+    key: "villa-soldati",
+    label: "Villa Soldati",
+    zonaprop: "villa-soldati",
+    argenprop: "villa-soldati",
+    airbnb: "Villa Soldati",
+    group: "South",
+  },
+  "villa-urquiza": {
+    key: "villa-urquiza",
+    label: "Villa Urquiza",
+    zonaprop: "villa-urquiza",
+    argenprop: "villa-urquiza",
+    airbnb: "Villa Urquiza",
+    group: "North corridor",
+  },
+};
+
+const NEIGHBORHOOD_ALIASES: Record<string, string> = {
+  paternal: "la-paternal",
 };
 
 export type SupportedNeighborhood = {
@@ -404,7 +600,8 @@ function resolveNeighborhoods(values: string[]): Neighborhood[] {
   }
 
   return values.map((value) => {
-    const key = normalizeNeighborhoodKey(value);
+    const normalizedKey = normalizeNeighborhoodKey(value);
+    const key = NEIGHBORHOOD_ALIASES[normalizedKey] || normalizedKey;
     const neighborhood = NEIGHBORHOODS[key];
     if (!neighborhood) {
       throw new Error(`Unsupported neighborhood "${value}". Supported: ${supportedNeighborhoods().join(", ")}.`);
@@ -431,11 +628,29 @@ function buildZonapropUrl(filters: SearchFilters, neighborhoods: Neighborhood[])
     "alquiler",
     "temporal",
     ...neighborhoods.map((item) => item.zonaprop),
-    "con",
-    "amoblado",
   ];
+  if (filters.furnished !== false) parts.push("con", "amoblado");
   parts.push(...zonapropRangeParts(ambientes, "ambientes"));
   parts.push(...zonapropRangeParts(dormitorios, "habitaciones"));
+  if (filters.minBathrooms) {
+    if (filters.minBathrooms === 1) parts.push("1", "bano");
+    else parts.push("mas", "de", String(filters.minBathrooms - 1), "banos");
+  }
+  if (typeof filters.minParking === "number") {
+    if (filters.minParking === 0) parts.push("sin", "cocheras");
+    else parts.push("mas", "de", String(filters.minParking - 1), "cocheras");
+  }
+  parts.push(...zonapropSurfaceParts(filters.surfaceType, filters.minSurfaceM2, filters.maxSurfaceM2));
+  parts.push(...zonapropConParts(filters.propertySubtypes));
+  parts.push(...zonapropConParts(filters.roomTypes));
+  parts.push(...zonapropConParts(filters.comforts));
+  parts.push(...zonapropConParts(filters.propertyFeatures));
+  parts.push(...zonapropConParts(filters.disposition));
+  parts.push(...zonapropConParts(filters.services));
+  parts.push(...zonapropConParts(filters.media));
+  parts.push(...zonapropAdvertiserParts(filters.advertiserType));
+  parts.push(...zonapropPublicationDateParts(filters.publicationDate));
+  parts.push(...zonapropAgeParts(filters.age));
   parts.push(...zonapropPriceParts(filters.minPriceUsd, filters.maxPriceUsd));
 
   return {
@@ -456,12 +671,18 @@ function buildArgenpropUrl(filters: SearchFilters, neighborhoods: Neighborhood[]
   ];
   pathParts.push(...argenpropRangePathParts(ambientes, "ambientes"));
   pathParts.push(...argenpropRangePathParts(dormitorios, "dormitorios"));
+  if (filters.minBathrooms) pathParts.push(`${filters.minBathrooms}-o-mas-banos`);
+  pathParts.push(...argenpropSurfacePathParts(filters.minSurfaceM2, filters.maxSurfaceM2));
   const pricePath = argenpropPricePath(filters.minPriceUsd, filters.maxPriceUsd);
   if (pricePath) pathParts.push(pricePath);
+  const queryFlags = dedupeStrings([
+    ...(filters.furnished === false ? [] : ["con-amoblado"]),
+    ...(filters.argenpropGeneralServices || []).map((value) => `con-${value}`),
+  ]);
 
   return {
     provider: "argenprop",
-    url: `https://www.argenprop.com/${pathParts.join("/")}?con-amoblado`,
+    url: `https://www.argenprop.com/${pathParts.join("/")}${queryFlags.length ? `?${queryFlags.join("&")}` : ""}`,
     warnings: [],
     ignored: [],
   };
@@ -519,9 +740,54 @@ function argenpropRangePathParts(range: { min?: number; max?: number }, unit: "a
   return [];
 }
 
+function zonapropConParts(values: string[] | undefined): string[] {
+  return (values || []).flatMap((value) => ["con", value]);
+}
+
+function zonapropSurfaceParts(type: SearchFilters["surfaceType"], min?: number, max?: number): string[] {
+  validateMinMax(min, max, "surface");
+  if (!min && !max) return [];
+  const surfaceType = type === "covered" ? "cubierta" : "total";
+  if (min && max) return [`${min}-${max}-metros-cuadrados-${surfaceType}`];
+  if (max) return [`hasta-${max}-metros-cuadrados-${surfaceType}`];
+  return [`mas-de-${min}-metros-cuadrados-${surfaceType}`];
+}
+
+function argenpropSurfacePathParts(min?: number, max?: number): string[] {
+  validateMinMax(min, max, "surface");
+  if (min && max) return [`metros-cuadrados-${min}-${max}`];
+  if (max) return [`metros-cuadrados-hasta-${max}`];
+  if (min) return [`metros-cuadrados-desde-${min}`];
+  return [];
+}
+
+function zonapropAdvertiserParts(value: SearchFilters["advertiserType"]): string[] {
+  if (value === "agency") return ["inmobiliaria"];
+  if (value === "owner") return ["dueno-directo"];
+  return [];
+}
+
+function zonapropPublicationDateParts(value: SearchFilters["publicationDate"]): string[] {
+  if (value === "yesterday") return ["publicado-desde-ayer"];
+  if (value === "today") return ["publicado-hoy"];
+  if (value === "last-week") return ["publicado-ultimos-7-dias"];
+  return [];
+}
+
+function zonapropAgeParts(value: SearchFilters["age"]): string[] {
+  if (value === "under-construction") return ["en-construccion"];
+  if (value === "new") return ["a-estrenar"];
+  if (value === "up-to-5-years") return ["hasta-5-anos"];
+  return [];
+}
+
 function inclusiveRange(min: number, max: number): number[] {
   if (max < min) return [];
   return Array.from({ length: max - min + 1 }, (_, index) => min + index);
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function buildAirbnbUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): BuiltSearchUrl {
@@ -533,6 +799,11 @@ function buildAirbnbUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): 
   if (filters.dormitorios) ignored.push("dormitorios");
   if (filters.minDormitorios) ignored.push("minDormitorios");
   if (filters.maxDormitorios) ignored.push("maxDormitorios");
+  if (filters.minSurfaceM2) ignored.push("minSurfaceM2");
+  if (filters.maxSurfaceM2) ignored.push("maxSurfaceM2");
+  if (filters.minParking) ignored.push("minParking");
+  if (filters.propertySubtypes?.length) ignored.push("propertySubtypes");
+  if (filters.argenpropGeneralServices?.length) ignored.push("argenpropGeneralServices");
   if (!filters.checkIn || !filters.checkOut) {
     warnings.push("Airbnb searches work best with --check-in and --check-out; results and pricing may be incomplete.");
   }
@@ -545,15 +816,26 @@ function buildAirbnbUrl(filters: SearchFilters, neighborhoods: Neighborhood[]): 
   url.searchParams.set("refinement_paths[]", "/homes");
   url.searchParams.set("query", location);
   url.searchParams.set("search_mode", "regular_search");
-  url.searchParams.set("room_types[]", "Entire home/apt");
-  url.searchParams.set("amenities[]", "33");
+  for (const roomType of filters.airbnbRoomTypes?.length ? filters.airbnbRoomTypes : ["Entire home/apt"]) {
+    url.searchParams.append("room_types[]", roomType);
+  }
+  for (const amenityId of filters.airbnbAmenityIds?.length ? filters.airbnbAmenityIds : ["33"]) {
+    url.searchParams.append("amenities[]", amenityId);
+  }
   url.searchParams.set("adults", String(filters.adults ?? 1));
-  url.searchParams.set("guests", String(filters.adults ?? 1));
+  if (filters.children) url.searchParams.set("children", String(filters.children));
+  if (filters.infants) url.searchParams.set("infants", String(filters.infants));
+  if (filters.pets) url.searchParams.set("pets", String(filters.pets));
+  const guests = (filters.adults ?? 1) + (filters.children ?? 0);
+  url.searchParams.set("guests", String(guests));
   url.searchParams.set("disable_auto_translation", "true");
   if (filters.checkIn) url.searchParams.set("checkin", filters.checkIn);
   if (filters.checkOut) url.searchParams.set("checkout", filters.checkOut);
   if (filters.minPriceUsd) url.searchParams.set("price_min", String(filters.minPriceUsd));
   if (filters.maxPriceUsd) url.searchParams.set("price_max", String(filters.maxPriceUsd));
+  if (filters.minBedrooms) url.searchParams.set("min_bedrooms", String(filters.minBedrooms));
+  if (filters.minBeds) url.searchParams.set("min_beds", String(filters.minBeds));
+  if (filters.minAirbnbBathrooms) url.searchParams.set("min_bathrooms", String(filters.minAirbnbBathrooms));
 
   return {
     provider: "airbnb",
